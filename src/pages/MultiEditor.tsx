@@ -80,9 +80,9 @@ export default function MultiEditor() {
 
   const goResult = () => {
     const state: RouteState = {
-      mode: "multi",
       participants,
       titles,
+      layoutHint: "multi",
     };
     nav("/result", { state });
   };
@@ -103,7 +103,7 @@ export default function MultiEditor() {
       if (!wrap) return;
       const available = wrap.clientWidth - 8;
       const fit = available / BOARD_W;
-      const s = Math.min(1, Math.max(0.6, fit));
+      const s = Math.min(1, fit);
       setPreviewScale(s);
     };
     handleResize();
@@ -113,7 +113,7 @@ export default function MultiEditor() {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>다인 편집</h2>
+      <h2 style={{ fontSize: 18, marginBottom: 12 }}>멀티 취향표 편집기</h2>
 
       {/* ===== 모바일: 위(선택) / 아래(미리보기) ===== */}
       <section style={{ display: "grid", gap: 16 }}>
@@ -207,7 +207,6 @@ export default function MultiEditor() {
                       <SmartImageCell
                         value={p.images[j]}
                         onChange={(v) => updateImage(i, j, v)}
-                        size={120}
                         config={cfg}
                       />
                     </div>
@@ -267,7 +266,6 @@ export default function MultiEditor() {
             }}
           >
             <CollageBoard
-              mode="multi"
               participants={previewData}
               titles={titles}
               cell={CELL}

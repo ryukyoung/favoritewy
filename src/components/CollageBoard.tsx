@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { Participant } from "../types";
 
 type Props = {
-  mode: "single" | "multi";
   participants: Participant[]; // images: (File | string | null)[]
   titles: string[];
   cell: number;
@@ -14,7 +13,6 @@ type Props = {
 };
 
 export default function CollageBoard({
-  mode,
   participants,
   titles,
   cell,

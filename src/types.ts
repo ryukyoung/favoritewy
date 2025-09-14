@@ -1,4 +1,3 @@
-export type Mode = "solo" | "multi";
 export type ImgLike = string | File | null | undefined;
 
 export type Participant = {
@@ -7,7 +6,7 @@ export type Participant = {
 };
 
 export type RouteState = {
-  mode: Mode;
   participants: Participant[];
   titles: string[]; // 길이 12
+  layoutHint: "single" | "multi";
 };

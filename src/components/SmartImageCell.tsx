@@ -1,31 +1,39 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import ImageCell from "./ImageCell";
 import type { PresetItem, ColumnConfig } from "../columnConfig";
 import { getYoutubeId, getYoutubeThumb } from "../youtubeUtil";
 
 type Props = {
   value: File | string | null;
   onChange: (v: File | string | null) => void;
-  size?: number;
   config: ColumnConfig;
 };
 
-export default function SmartImageCell({
-  value,
-  onChange,
-  size = 112,
-  config,
-}: Props) {
+export default function SmartImageCell({ value, onChange, config }: Props) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const valueSummary = (() => {
     if (!value) return "선택 없음";
-    if (typeof value === "string")
-      return value.startsWith("http") ? "이미지 선택됨" : "텍스트";
-    return value instanceof File ? `파일(${value.name})` : "선택됨";
+
+    // 1) 파일이면 파일명
+    if (value instanceof File) return `파일(${value.name})`;
+
+    // 2) 문자열(프리셋/URL/텍스트)인 경우
+    if (typeof value === "string") {
+      // 2-1) 프리셋 URL과 매칭되면 프리셋 이름(label) 표시
+      const presetLabel = config.presets?.find((p) => p.url === value)?.label;
+      if (presetLabel) return presetLabel;
+
+      // 2-2) 유효한 URL이면 간단 요약 (원하면 도메인/경로 파싱해서 더 예쁘게 표시 가능)
+      if (value.startsWith("http")) return "이미지 선택됨";
+
+      // 2-3) 그 외는 텍스트 그대로 보여주기
+      return value || "텍스트";
+    }
+
+    return "선택됨";
   })();
 
   // 오버레이 위치
