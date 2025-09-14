@@ -1,5 +1,4 @@
 import { useMemo, useState, useRef, useLayoutEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import SmartImageCell from "../components/SmartImageCell";
 import type { Participant } from "../types";
 import { COLUMN_CONFIGS } from "../columnConfig";

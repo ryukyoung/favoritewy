@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import CollageBoard from "../components/CollageBoard";
-import type { Participant, RouteState } from "../types";
+import type { Participant } from "../types";
 import SmartImageCell from "../components/SmartImageCell";
 import { COLUMN_CONFIGS } from "../columnConfig";
 import { toPng } from "html-to-image";
