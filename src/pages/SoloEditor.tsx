@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SmartImageCell from "../components/SmartImageCell";
-import type { Participant, RouteState } from "../types";
+import type { Participant } from "../types";
 import { COLUMN_CONFIGS } from "../columnConfig";
 import CollageBoardSingle from "../components/CollageBoardSingle";
 
@@ -23,8 +23,6 @@ const PREVIEW_PER_BLOCK_H =
 const PREVIEW_BOARD_H = TOP + BOTTOM + PREVIEW_PER_BLOCK_H; // 참가자 1명
 
 export default function SoloEditor() {
-  const nav = useNavigate();
-
   // 1) SOLO용 칸 설정: COLUMN_CONFIGS에서 10개로 맞추고, 모자라면 업로드로 채움
   const SOLO_CONFIGS = useMemo(() => {
     const out = [...COLUMN_CONFIGS].slice(0, SOLO_COLS);

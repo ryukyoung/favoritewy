@@ -188,16 +188,6 @@ export default function MultiEditor() {
     });
   };
 
-  // 결과 페이지 이동(기존 기능 유지)
-  const goResult = () => {
-    const state: RouteState = {
-      participants,
-      titles,
-      layoutHint: "multi",
-    };
-    nav("/result", { state });
-  };
-
   // 보드 사이즈/스케일
   const previewData = useMemo(() => participants, [participants]);
   const boardHeight = useMemo(
