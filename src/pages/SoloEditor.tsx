@@ -58,16 +58,6 @@ export default function SoloEditor() {
     });
   };
 
-  // 4) 결과로 이동 (layoutHint 안 쓰면 아래 주석처럼 빼도 OK)
-  const goResult = () => {
-    const state: RouteState = {
-      participants: [participant],
-      titles,
-      layoutHint: "single", // ← types.ts에 optional로 추가했을 때만 사용
-    };
-    nav("/result", { state });
-  };
-
   // 5) 미리보기 배율 (★ 4열 보드 폭 기반)
   const previewWrapRef = useRef<HTMLDivElement>(null);
   const [previewScale, setPreviewScale] = useState(1);
@@ -167,23 +157,6 @@ export default function SoloEditor() {
           {renderRow(row2, 3)}
           {renderRow(row3, 3)}
           {renderRow(row4, 1)}
-        </div>
-
-        {/* 결과 화면 이동 */}
-        <div>
-          <button
-            onClick={goResult}
-            style={{
-              width: "100%",
-              padding: "14px 16px",
-              fontSize: 16,
-              borderRadius: 12,
-              border: "1px solid #ddd",
-              background: "#fff",
-            }}
-          >
-            결과 화면으로
-          </button>
         </div>
       </section>
 
