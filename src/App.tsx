@@ -10,6 +10,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/solo" element={<SoloEditor />} />
       <Route path="/multi" element={<MultiEditor />} />
+      <Route path="/multi/:roomId" element={<MultiEditor />} />
       <Route path="/result" element={<Result />} />
     </Routes>
   );
