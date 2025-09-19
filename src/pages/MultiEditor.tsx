@@ -22,17 +22,16 @@ import {
   updateDoc,
   serverTimestamp,
   collection,
+  onSnapshot,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-
-// ✅ 추가: 브라우저 이미지 압축
-import imageCompression from "browser-image-compression";
 
 const IMG_COLS = COLUMN_CONFIGS.length;
 const GRID_ROWS = 4;
 const GRID_COLS = Math.ceil(IMG_COLS / GRID_ROWS);
 const BG1 = "../assets/bg-5.png";
 const BG2 = "../assets/bg-10.png";
+
 // 기본 타이틀
 const DEFAULT_TITLES = COLUMN_CONFIGS.map((c) => c.title);
 
@@ -47,34 +46,10 @@ const BOTTOM = 110;
 const GRID_W = IMG_COLS * CELL + (IMG_COLS - 1) * GAP;
 const BOARD_W = LEFT_SIDE + RIGHT_SIDE + GRID_W;
 
-// ✅ 업로드 유틸(메타데이터 포함)
 export async function uploadImageAndGetUrl(file: File, path: string) {
   const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file, {
-    contentType: file.type || "image/jpeg",
-  });
+  await uploadBytes(storageRef, file);
   return await getDownloadURL(storageRef);
-}
-
-// ✅ 파일 압축 유틸
-async function compressIfNeeded(file: File) {
-  const opts = {
-    maxSizeMB: 1, // 대략 1MB 목표
-    maxWidthOrHeight: 1200, // 긴 변 기준 리사이즈
-    useWebWorker: true,
-    initialQuality: 0.85,
-  };
-  try {
-    if (file.size <= 1.2 * 1024 * 1024) return file; // 이미 충분히 작으면 그대로
-    return await imageCompression(file, opts);
-  } catch {
-    return file; // 실패 시 원본 사용
-  }
-}
-
-// 파일명 안전하게
-function safeName(name: string) {
-  return (name || "img").replace(/[^\w.-]+/g, "_");
 }
 
 export default function MultiEditor() {
@@ -93,8 +68,7 @@ export default function MultiEditor() {
 
   const [countField, setCountField] = useState(String(count));
 
-  // ✅ 배경 선택 상태
-  // bgKey: "bg1" | "bg2"
+  // 배경 선택(원하면 Firestore에 저장/복원도 가능)
   const [bgKey, setBgKey] = useState<"bg1" | "bg2">("bg1");
   const selectedBgUrl = bgKey === "bg1" ? BG1 : BG2;
 
@@ -104,14 +78,20 @@ export default function MultiEditor() {
     [roomId]
   );
 
-  // ✅ /multi 로 들어온 경우: 방 자동 생성 → 이동
+  // /multi 로 들어온 경우: 방 자동 생성 → 이동
   useEffect(() => {
     if (roomId) return;
     (async () => {
       const newRef = doc(collection(db, "rooms")); // 자동 ID
-      const initial = {
+      const initial: {
+        titles: string[];
+        participants: Participant[];
+        count: number;
+        createdAt: any;
+        updatedAt: any;
+      } = {
         titles: DEFAULT_TITLES,
-        participants: participants, // 현재 로컬 상태로 초기화
+        participants,
         count: participants.length,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -130,54 +110,19 @@ export default function MultiEditor() {
     images: Array(IMG_COLS).fill(null),
   });
 
+  // ✅ 서버 상태 실시간 구독(새로고침/재입장 시 복원)
   useEffect(() => {
     if (!roomRef) return;
-    let mounted = true;
 
-    (async () => {
-      const snap = await getDoc(roomRef);
-      if (!mounted) return;
+    let initializing = true;
 
-      if (snap.exists()) {
-        const data = snap.data() as any;
-
-        // participants 보정 (최소 2명)
-        let p: Participant[] = Array.isArray(data?.participants)
-          ? [...data.participants]
-          : [];
-        if (p.length < 2) {
-          for (let i = p.length; i < 2; i++) p.push(makeEmptyParticipant());
-        }
-
-        // count 보정 (2~10로 클램프, 기본은 participants 길이)
-        const c = clamp(
-          typeof data?.count === "number" ? data.count : p.length || 2,
-          2,
-          10
-        );
-
-        // 상태 반영
-        setParticipants(p);
-        setCount(c);
-
-        // Firestore에도 보정값 반영(선택: 데이터 정리용)
-        if (
-          data?.count !== c ||
-          (Array.isArray(data?.participants) &&
-            data.participants.length !== p.length)
-        ) {
-          await updateDoc(roomRef, {
-            participants: p,
-            count: c,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } else {
-        // 문서가 없다면 기본값으로 생성 (최소 2명 보장)
-        const base: Participant[] =
-          participants.length >= 2
-            ? participants
-            : [makeEmptyParticipant(), makeEmptyParticipant()];
+    const unsub = onSnapshot(roomRef, async (snap) => {
+      if (!snap.exists()) {
+        // 문서가 없으면 생성
+        const base: Participant[] = [
+          makeEmptyParticipant(),
+          makeEmptyParticipant(),
+        ];
         await setDoc(roomRef, {
           titles: DEFAULT_TITLES,
           participants: base,
@@ -185,50 +130,77 @@ export default function MultiEditor() {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
-        setParticipants(base);
-        setCount(base.length);
+        return;
       }
-    })();
 
-    return () => {
-      mounted = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      const data = snap.data() as any;
+
+      // participants 최소 2명 보정
+      let p: Participant[] = Array.isArray(data?.participants)
+        ? [...data.participants]
+        : [];
+      if (p.length < 2) {
+        for (let i = p.length; i < 2; i++) p.push(makeEmptyParticipant());
+        // 서버에도 반영
+        void updateDoc(roomRef, {
+          participants: p,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error);
+      }
+
+      // count 2~10 클램프
+      const c = clamp(
+        typeof data?.count === "number" ? data.count : p.length || 2,
+        2,
+        10
+      );
+      if (data?.count !== c) {
+        void updateDoc(roomRef, {
+          count: c,
+          updatedAt: serverTimestamp(),
+        }).catch(console.error);
+      }
+
+      // 로컬 상태 동기화
+      setParticipants(p);
+      setCount(c);
+      if (initializing) {
+        setCountField(String(c));
+        initializing = false;
+      }
+    });
+
+    return () => unsub();
   }, [roomRef]);
 
   // 인원 변경
   const onChangeCount = (n: number) => {
     const c = Math.max(2, Math.min(10, Math.floor(n) || 2));
     setCount(c);
+    setCountField(String(c));
     setParticipants((prev) => {
       const next = [...prev];
       if (next.length < c) {
-        while (next.length < c) {
-          next.push({
-            nickname: "",
-            images: Array(IMG_COLS).fill(null),
-          });
-        }
+        while (next.length < c) next.push(makeEmptyParticipant());
       } else if (next.length > c) {
         next.length = c;
       }
-      // 서버에 반영(선택)
+      // 서버 반영
       if (roomRef) {
-        void updateDoc(roomRef, {
+        updateDoc(roomRef, {
           participants: next,
           count: c,
           updatedAt: serverTimestamp(),
+        }).catch((e) => {
+          console.error("count update failed:", e);
+          alert("인원 수 저장에 실패했어요. 권한/네트워크를 확인해 주세요.");
         });
       }
       return next;
     });
   };
-  // count가 바뀌면 입력창도 동기화
-  useEffect(() => {
-    setCountField(String(count));
-  }, [count]);
 
-  // 입력 확정 처리(클램프 포함).
+  // 입력 확정 처리(클램프 포함)
   const commitCountFromField = () => {
     const n = parseInt(countField, 10);
     if (Number.isNaN(n)) {
@@ -238,20 +210,99 @@ export default function MultiEditor() {
     onChangeCount(Math.min(10, Math.max(2, n)));
   };
 
+  // 닉네임 변경
   const updateNickname = (idx: number, name: string) => {
     setParticipants((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], nickname: name };
       if (roomRef) {
-        void updateDoc(roomRef, {
+        updateDoc(roomRef, {
           participants: next,
           updatedAt: serverTimestamp(),
+        }).catch((e) => {
+          console.error("nickname update failed:", e);
+          alert("닉네임 저장에 실패했어요.");
         });
       }
       return next;
     });
   };
 
+  // 이미지/프리셋/유튜브 썸네일 업데이트(+Storage 업로드)
+  const updateImage = (
+    idx: number,
+    imgIdx: number,
+    v: File | string | null
+  ) => {
+    // 공통 저장 함수
+    const persist = (imagesArray: (File | string | null)[]) => {
+      if (roomRef) {
+        updateDoc(roomRef, {
+          participants: imagesArray
+            ? participants.map((p, i) =>
+                i === idx ? { ...p, images: imagesArray } : p
+              )
+            : participants,
+          updatedAt: serverTimestamp(),
+        }).catch((e) => {
+          console.error("image update failed:", e);
+          alert("이미지 저장에 실패했어요.");
+        });
+      }
+    };
+
+    // 낙관적 로컬 업데이트
+    setParticipants((prev) => {
+      const next = [...prev];
+      const imgs = [...(next[idx].images || [])];
+
+      if (v instanceof File) {
+        // 1) 즉시 미리보기(blob URL)
+        const tempUrl = URL.createObjectURL(v);
+        imgs[imgIdx] = tempUrl;
+        next[idx] = { ...next[idx], images: imgs };
+        // 2) 비동기 업로드 → 다운로드 URL 저장
+        if (roomId) {
+          const key = `${roomId}/${idx}-${imgIdx}-${Date.now()}-${v.name}`;
+          uploadImageAndGetUrl(v, key)
+            .then((url) => {
+              // 로컬 교체
+              setParticipants((curr) => {
+                const n2 = [...curr];
+                const i2 = [...(n2[idx].images || [])];
+                i2[imgIdx] = url;
+                n2[idx] = { ...n2[idx], images: i2 };
+                // 서버 저장
+                if (roomRef) {
+                  updateDoc(roomRef, {
+                    participants: n2,
+                    updatedAt: serverTimestamp(),
+                  }).catch((e) => {
+                    console.error("image url save failed:", e);
+                    alert("업로드 URL 저장에 실패했어요.");
+                  });
+                }
+                return n2;
+              });
+            })
+            .catch((e) => {
+              console.error(e);
+              alert("이미지 업로드 실패");
+            });
+        }
+      } else {
+        // 문자열(URL) 또는 null
+        imgs[imgIdx] = (v as string | null) ?? null;
+        next[idx] = { ...next[idx], images: imgs };
+        // 서버 저장
+        persist(imgs);
+      }
+
+      return next;
+    });
+  };
+
+  // 이미지 로드 에러 로그(선택)
   useEffect(() => {
     const onImgError = (e: Event) => {
       const t = e.target as HTMLImageElement;
@@ -262,49 +313,6 @@ export default function MultiEditor() {
     window.addEventListener("error", onImgError, true);
     return () => window.removeEventListener("error", onImgError, true);
   }, []);
-
-  // 이미지/프리셋/유튜브 썸네일 업데이트(+Storage 업로드)
-  const updateImage = (
-    idx: number,
-    imgIdx: number,
-    v: File | string | null
-  ) => {
-    setParticipants((prev) => {
-      const next = [...prev];
-      const imgs = [...(next[idx].images || [])];
-
-      const saveToServer = (urlOrNull: string | null) => {
-        imgs[imgIdx] = urlOrNull as any;
-        next[idx] = { ...next[idx], images: imgs };
-        if (roomRef) {
-          void updateDoc(roomRef, {
-            participants: next,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      };
-
-      if (v instanceof File) {
-        if (!roomId) return next; // 방 생성 전 가드
-        (async () => {
-          const compressed = await compressIfNeeded(v);
-          const key = `${roomId}/${idx}-${imgIdx}-${Date.now()}-${safeName(
-            v.name
-          )}`;
-          try {
-            const url = await uploadImageAndGetUrl(compressed, key);
-            saveToServer(url);
-          } catch (e) {
-            console.error(e);
-            alert("이미지 업로드 실패");
-          }
-        })();
-      } else {
-        saveToServer(v as string | null);
-      }
-      return next;
-    });
-  };
 
   // 보드 사이즈/스케일
   const previewData = useMemo(() => participants, [participants]);
@@ -419,6 +427,7 @@ export default function MultiEditor() {
           URL 복사
         </button>
       </div>
+
       <section style={{ display: "grid", gap: 16 }}>
         <div
           style={{
@@ -570,7 +579,7 @@ export default function MultiEditor() {
         </div>
       </section>
 
-      {/* ✅ 배경 선택 컨트롤 (CollageBoard 미리보기 위) */}
+      {/* 배경 선택 */}
       <div
         style={{
           display: "flex",
@@ -583,9 +592,7 @@ export default function MultiEditor() {
         <span style={{ fontSize: 14, marginRight: 6 }}>배경</span>
         <button
           type="button"
-          onClick={() => {
-            setBgKey("bg1");
-          }}
+          onClick={() => setBgKey("bg1")}
           aria-pressed={bgKey === "bg1"}
           style={{
             padding: 6,
@@ -609,9 +616,7 @@ export default function MultiEditor() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            setBgKey("bg2");
-          }}
+          onClick={() => setBgKey("bg2")}
           aria-pressed={bgKey === "bg2"}
           style={{
             padding: 6,
