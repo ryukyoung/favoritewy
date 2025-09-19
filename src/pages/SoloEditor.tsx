@@ -297,7 +297,7 @@ export default function SoloEditor() {
         gap: 10,
       }}
     >
-      {idxs.map((i, idx) => {
+      {idxs.map((i) => {
         const cfg = SOLO_CONFIGS[i];
         const spanAll = idxs.length === 1 && cols > 1; // ✅ 마지막 줄 1칸이면 전체 폭 사용
         return (
