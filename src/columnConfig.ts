@@ -51,7 +51,7 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
       { label: "AMUSE", url: "../assets/ad/amuse.jpg" },
       { label: "rolarola", url: "../assets/ad/rola.jpg" },
       { label: "KÉRASTASE", url: "../assets/ad/kerastase.jpg" },
-      { label: "TOMMY JEANS", url: "../assets/ad/tommy.jpg" },
+      { label: "TOMMY JEANS", url: "../assets/ad/tommy.jpeg" },
       { label: "우리은행", url: "../assets/ad/우리은행.jpeg" },
       { label: "Malto", url: "../assets/ad/Malto.jpg" },
       { label: "DEEP & LOW", url: "../assets/ad/deep.png" },

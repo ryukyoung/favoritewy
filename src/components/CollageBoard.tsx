@@ -90,7 +90,7 @@ export default function CollageBoard({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontWeight: 500,
+            fontWeight: 600,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -143,7 +143,7 @@ export default function CollageBoard({
                   }}
                 />
               ) : (
-                <span style={{ fontSize: 12, color: "#aaa" }}>No Image</span>
+                <span style={{ fontSize: 12, color: "#aaa" }}>♥</span>
               )}
             </div>
           );

@@ -329,11 +329,12 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     <div
       style={{
         width: "100%",
-        border: "1px solid #e9e9e9",
-        borderRadius: 12,
-        background: "#fff",
         boxSizing: "border-box",
         minWidth: 0,
+        overflow: "hidden",
+        border: "1px solid #e9e9e9",
+
+        borderRadius: 12,
       }}
     >
       <button

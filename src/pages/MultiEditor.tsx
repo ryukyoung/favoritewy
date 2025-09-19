@@ -12,7 +12,7 @@ import CollageBoard from "../components/CollageBoard";
 import type { Participant } from "../types";
 import SmartImageCell from "../components/SmartImageCell";
 import { COLUMN_CONFIGS } from "../columnConfig";
-
+import imageCompression from "browser-image-compression";
 import { db, storage } from "../lib/firebase";
 import {
   doc,
@@ -99,7 +99,22 @@ function drawMultilineText(
 
 export async function uploadImageAndGetUrl(file: File, path: string) {
   const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file);
+
+  // 🔽 클라이언트 압축 (대략 1MB / 긴 변 1200px)
+  const compressed = await imageCompression(file, {
+    maxSizeMB: 1,
+    maxWidthOrHeight: 1200,
+    useWebWorker: true,
+    initialQuality: 0.85,
+  });
+
+  // 🔽 CDN 캐시/컨텐츠타입 메타데이터(선택이지만 추천)
+  const metadata = {
+    contentType: file.type || "image/jpeg",
+    cacheControl: "public, max-age=31536000, immutable",
+  };
+
+  await uploadBytes(storageRef, compressed, metadata);
   return await getDownloadURL(storageRef);
 }
 
@@ -593,7 +608,7 @@ export default function MultiEditor() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "auto 1fr auto",
+          gridTemplateColumns: "1fr auto 1fr",
           gap: 16,
           alignItems: "center",
           marginBottom: 20,
@@ -614,6 +629,7 @@ export default function MultiEditor() {
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
+            color: "#000",
           }}
         >
           <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
@@ -624,6 +640,7 @@ export default function MultiEditor() {
             color: "#000",
             justifySelf: "center",
             margin: 0,
+            gridColumn: 2,
           }}
         >
           취향표 편집기
@@ -636,11 +653,14 @@ export default function MultiEditor() {
               .catch(() => alert("복사를 실패했습니다."));
           }}
           style={{
+            justifySelf: "end",
+            width: "max-content",
             padding: "10px 12px",
             fontSize: 16,
             borderRadius: 12,
             border: "1px solid #ddd",
             background: "#fff",
+            color: "#000",
           }}
         >
           URL 복사
@@ -805,58 +825,69 @@ export default function MultiEditor() {
           alignItems: "center",
           gap: 10,
           marginTop: 12,
-          justifyContent: "flex-end",
+          justifyContent: "space-between",
         }}
       >
-        <span style={{ fontSize: 14, marginRight: 6 }}>배경</span>
-        <button
-          type="button"
-          onClick={() => setBgKey("bg1")}
-          aria-pressed={bgKey === "bg1"}
+        <span
           style={{
-            padding: 6,
-            borderRadius: 10,
-            border: bgKey === "bg1" ? "2px solid #333" : "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
+            fontSize: 17,
+            marginLeft: 6,
+            fontWeight: 600,
+            color: "#000",
           }}
-          title="배경 1"
         >
-          <div
+          배경
+        </span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setBgKey("bg1")}
+            aria-pressed={bgKey === "bg1"}
             style={{
-              width: 56,
-              height: 36,
-              backgroundImage: `url(${BG1})`,
-              backgroundSize: "cover",
-              backgroundPosition: "top center",
-              borderRadius: 8,
+              padding: 6,
+              borderRadius: 10,
+              border: bgKey === "bg1" ? "2px solid #333" : "1px solid #ddd",
+              background: "#fff",
+              cursor: "pointer",
             }}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={() => setBgKey("bg2")}
-          aria-pressed={bgKey === "bg2"}
-          style={{
-            padding: 6,
-            borderRadius: 10,
-            border: bgKey === "bg2" ? "2px solid #333" : "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
-          }}
-          title="배경 2"
-        >
-          <div
+            title="배경 1"
+          >
+            <div
+              style={{
+                width: 56,
+                height: 36,
+                backgroundImage: `url(${BG1})`,
+                backgroundSize: "cover",
+                backgroundPosition: "top center",
+                borderRadius: 8,
+              }}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => setBgKey("bg2")}
+            aria-pressed={bgKey === "bg2"}
             style={{
-              width: 56,
-              height: 36,
-              backgroundImage: `url(${BG2})`,
-              backgroundSize: "cover",
-              backgroundPosition: "top center",
-              borderRadius: 8,
+              padding: 6,
+              borderRadius: 10,
+              border: bgKey === "bg2" ? "2px solid #333" : "1px solid #ddd",
+              background: "#fff",
+              cursor: "pointer",
             }}
-          />
-        </button>
+            title="배경 2"
+          >
+            <div
+              style={{
+                width: 56,
+                height: 36,
+                backgroundImage: `url(${BG2})`,
+                backgroundSize: "cover",
+                backgroundPosition: "top center",
+                borderRadius: 8,
+              }}
+            />
+          </button>
+        </div>
       </div>
 
       <section

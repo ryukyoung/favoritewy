@@ -532,7 +532,6 @@ export default function SoloEditor() {
     >
       {idxs.map((i) => {
         const cfg = SOLO_CONFIGS[i];
-        const spanAll = idxs.length === 1 && cols > 1; // ✅ 마지막 줄 1칸이면 전체 폭 사용
         return (
           <div
             key={i}
@@ -541,7 +540,6 @@ export default function SoloEditor() {
               flexDirection: "column",
               alignItems: "stretch",
               gap: 6,
-              gridColumn: spanAll ? "1 / -1" : undefined,
             }}
           >
             <div
@@ -660,60 +658,70 @@ export default function SoloEditor() {
           alignItems: "center",
           gap: 10,
           marginTop: 12,
-          justifyContent: "flex-end",
+          justifyContent: "space-between",
         }}
       >
-        <span style={{ fontSize: 14, marginRight: 6 }}>배경</span>
-        <button
-          type="button"
-          onClick={() => setBgKey("bg1")}
-          aria-pressed={bgKey === "bg1"}
+        <span
           style={{
-            padding: 6,
-            borderRadius: 10,
-            border: bgKey === "bg1" ? "2px solid #333" : "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
+            fontSize: 17,
+            fontWeight: 600,
+            color: "#000",
+            marginLeft: 6,
           }}
-          title="배경 1"
         >
-          <div
+          배경
+        </span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setBgKey("bg1")}
+            aria-pressed={bgKey === "bg1"}
             style={{
-              width: 56,
-              height: 36,
-              backgroundImage: `url(${BG1})`,
-              backgroundSize: "cover",
-              backgroundPosition: "top center",
-              borderRadius: 8,
+              padding: 6,
+              borderRadius: 10,
+              border: bgKey === "bg1" ? "2px solid #333" : "1px solid #ddd",
+              background: "#fff",
+              cursor: "pointer",
             }}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={() => setBgKey("bg2")}
-          aria-pressed={bgKey === "bg2"}
-          style={{
-            padding: 6,
-            borderRadius: 10,
-            border: bgKey === "bg2" ? "2px solid #333" : "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
-          }}
-          title="배경 2"
-        >
-          <div
+            title="배경 1"
+          >
+            <div
+              style={{
+                width: 56,
+                height: 36,
+                backgroundImage: `url(${BG1})`,
+                backgroundSize: "cover",
+                backgroundPosition: "top center",
+                borderRadius: 8,
+              }}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => setBgKey("bg2")}
+            aria-pressed={bgKey === "bg2"}
             style={{
-              width: 56,
-              height: 36,
-              backgroundImage: `url(${BG2})`,
-              backgroundSize: "cover",
-              backgroundPosition: "top center",
-              borderRadius: 8,
+              padding: 6,
+              borderRadius: 10,
+              border: bgKey === "bg2" ? "2px solid #333" : "1px solid #ddd",
+              background: "#fff",
+              cursor: "pointer",
             }}
-          />
-        </button>
+            title="배경 2"
+          >
+            <div
+              style={{
+                width: 56,
+                height: 36,
+                backgroundImage: `url(${BG2})`,
+                backgroundSize: "cover",
+                backgroundPosition: "top center",
+                borderRadius: 8,
+              }}
+            />
+          </button>
+        </div>
       </div>
-
       {/* 미리보기: 4/4/2 보드 */}
       <section
         ref={previewWrapRef}

@@ -118,6 +118,7 @@ export default function CollageBoardSingle({
             justifyContent: "center", // 수평 중앙
             padding: "0 8px", // 좌우 여유
             boxSizing: "border-box",
+            fontWeight: 600,
           }}
           title={p.nickname}
         >
@@ -179,7 +180,7 @@ export default function CollageBoardSingle({
                     }}
                   />
                 ) : (
-                  <span style={{ fontSize: 12, color: "#aaa" }}>No Image</span>
+                  <span style={{ fontSize: 12, color: "#aaa" }}>♥</span>
                 )}
               </div>
             );
