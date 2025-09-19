@@ -57,7 +57,7 @@ export default function MultiEditor() {
   // 인원 & 데이터
   const [count, setCount] = useState(2);
   const [participants, setParticipants] = useState<Participant[]>(
-    Array.from({ length: 2 }, (_, i) => ({
+    Array.from({ length: 2 }, (_) => ({
       nickname: "",
       images: Array(IMG_COLS).fill(null),
     }))
@@ -98,7 +98,7 @@ export default function MultiEditor() {
   // helpers
   const clamp = (n: number, min: number, max: number) =>
     Math.max(min, Math.min(max, n));
-  const makeEmptyParticipant = (i: number): Participant => ({
+  const makeEmptyParticipant = (): Participant => ({
     nickname: "",
     images: Array(IMG_COLS).fill(null),
   });
@@ -119,7 +119,7 @@ export default function MultiEditor() {
           ? [...data.participants]
           : [];
         if (p.length < 2) {
-          for (let i = p.length; i < 2; i++) p.push(makeEmptyParticipant(i));
+          for (let i = p.length; i < 2; i++) p.push(makeEmptyParticipant());
         }
 
         // count 보정 (2~10로 클램프, 기본은 participants 길이)
@@ -150,7 +150,7 @@ export default function MultiEditor() {
         const base: Participant[] =
           participants.length >= 2
             ? participants
-            : [makeEmptyParticipant(0), makeEmptyParticipant(1)];
+            : [makeEmptyParticipant(), makeEmptyParticipant()];
         await setDoc(roomRef, {
           titles: DEFAULT_TITLES,
           participants: base,
