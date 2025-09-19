@@ -97,87 +97,6 @@ function drawMultilineText(
   });
 }
 
-async function drawImageCell(
-  ctx: CanvasRenderingContext2D,
-  imageValue: File | string | null,
-  x: number,
-  y: number,
-  size: number
-): Promise<void> {
-  // 셀 배경 그리기
-  ctx.fillStyle = "#fafafa";
-  ctx.fillRect(x, y, size, size);
-
-  if (!imageValue) {
-    ctx.fillStyle = "#aaa";
-    ctx.font = "12px Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("No Image", x + size / 2, y + size / 2);
-    return;
-  }
-
-  try {
-    let imageSrc: string;
-
-    if (imageValue instanceof File) {
-      imageSrc = URL.createObjectURL(imageValue);
-    } else {
-      imageSrc = imageValue;
-    }
-
-    const img = await loadImage(imageSrc);
-
-    // object-fit: cover 효과
-    const imgAspect = img.width / img.height;
-    const cellAspect = 1;
-
-    let drawWidth, drawHeight, drawX, drawY;
-
-    if (imgAspect > cellAspect) {
-      drawHeight = size;
-      drawWidth = size * imgAspect;
-      drawX = x - (drawWidth - size) / 2;
-      drawY = y;
-    } else {
-      drawWidth = size;
-      drawHeight = size / imgAspect;
-      drawX = x;
-      drawY = y - (drawHeight - size) / 2;
-    }
-
-    // YouTube 썸네일 스케일 처리
-    if (imageSrc.includes("ytimg.com")) {
-      const scale = 1.4;
-      const scaledW = drawWidth * scale;
-      const scaledH = drawHeight * scale;
-      drawX = x - (scaledW - size) / 2;
-      drawY = y - (scaledH - size) / 2;
-      drawWidth = scaledW;
-      drawHeight = scaledH;
-    }
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y, size, size);
-    ctx.clip();
-
-    ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-    ctx.restore();
-
-    if (imageValue instanceof File) {
-      URL.revokeObjectURL(imageSrc);
-    }
-  } catch (error) {
-    console.error("이미지 셀 그리기 실패:", error);
-    ctx.fillStyle = "#aaa";
-    ctx.font = "12px Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("Load Failed", x + size / 2, y + size / 2);
-  }
-}
-
 export async function uploadImageAndGetUrl(file: File, path: string) {
   const storageRef = ref(storage, path);
   await uploadBytes(storageRef, file);
@@ -465,17 +384,80 @@ export default function MultiEditor() {
     canvas.height = boardHeight;
 
     try {
-      // 1. 배경 이미지 그리기
-      const bgImg = await loadImage(selectedBgUrl);
-      ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+      // 폰트 로딩 대기
+      if ((document as any).fonts?.ready) {
+        try {
+          await (document as any).fonts.ready;
+        } catch {}
+      }
 
-      // 2. 각 참가자별로 그리기
-      const promises: Promise<void>[] = [];
+      // 1. 먼저 모든 이미지를 미리 로드
+      const allImages: Array<{
+        value: File | string | null;
+        x: number;
+        y: number;
+      }> = [];
 
       participants.forEach((participant, rowIndex) => {
-        if (rowIndex >= count) return; // 현재 설정된 인원수만
+        if (rowIndex >= count) return;
 
-        // 참가자 행 Y 좌표
+        const rowY = TOP + rowIndex * (CELL + GAP);
+
+        for (let colIndex = 0; colIndex < IMG_COLS; colIndex++) {
+          const imageValue = participant.images?.[colIndex];
+          if (imageValue) {
+            const cellX = LEFT_SIDE + colIndex * (CELL + GAP);
+            allImages.push({ value: imageValue, x: cellX, y: rowY });
+          }
+        }
+      });
+
+      // 백그라운드 이미지와 모든 셀 이미지를 동시에 로드
+      const loadPromises: Promise<HTMLImageElement>[] = [
+        loadImage(selectedBgUrl),
+      ];
+
+      allImages.forEach(({ value }) => {
+        if (value) {
+          let imageSrc: string;
+          if (value instanceof File) {
+            imageSrc = URL.createObjectURL(value);
+          } else {
+            imageSrc = value;
+          }
+          loadPromises.push(loadImage(imageSrc));
+        }
+      });
+
+      // 모든 이미지 로딩 완료까지 대기
+      const loadedImages = await Promise.all(loadPromises);
+      const bgImg = loadedImages[0];
+      const cellImages = loadedImages.slice(1);
+
+      // 추가 안전 대기
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // 2. 배경 이미지 그리기 (상단에서 크롭)
+      const scaleX = canvas.width / bgImg.width;
+
+      ctx.drawImage(
+        bgImg,
+        0,
+        0,
+        bgImg.width,
+        Math.min(bgImg.height, canvas.height / scaleX),
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      // 3. 각 참가자별로 그리기
+      let cellImageIndex = 0;
+
+      participants.forEach((participant, rowIndex) => {
+        if (rowIndex >= count) return;
+
         const rowY = TOP + rowIndex * (CELL + GAP);
 
         // 닉네임 그리기
@@ -484,11 +466,9 @@ export default function MultiEditor() {
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
 
-          // 배경에 따른 닉네임 색상
           const nicknameColor = bgKey === "bg1" ? "#fff" : "#000";
           ctx.fillStyle = nicknameColor;
 
-          // 닉네임 위치 (왼쪽 마진 영역 중앙)
           const nicknameX = LEFT_SIDE / 2;
           const nicknameY = rowY + CELL / 2;
           const maxNicknameWidth = LEFT_SIDE - 20;
@@ -504,20 +484,80 @@ export default function MultiEditor() {
           );
         }
 
-        // 이미지 셀들 그리기
+        // 이미지 셀들 그리기 (이미 로드된 이미지 사용)
         for (let colIndex = 0; colIndex < IMG_COLS; colIndex++) {
           const imageValue = participant.images?.[colIndex];
           const cellX = LEFT_SIDE + colIndex * (CELL + GAP);
           const cellY = rowY;
 
-          promises.push(drawImageCell(ctx, imageValue, cellX, cellY, CELL));
+          // 셀 배경 그리기
+          ctx.fillStyle = "#fafafa";
+          ctx.fillRect(cellX, cellY, CELL, CELL);
+
+          if (imageValue && cellImageIndex < cellImages.length) {
+            const img = cellImages[cellImageIndex];
+            cellImageIndex++;
+
+            // object-fit: cover 효과
+            const imgAspect = img.width / img.height;
+            const cellAspect = 1;
+
+            let drawWidth, drawHeight, drawX, drawY;
+
+            if (imgAspect > cellAspect) {
+              drawHeight = CELL;
+              drawWidth = CELL * imgAspect;
+              drawX = cellX - (drawWidth - CELL) / 2;
+              drawY = cellY;
+            } else {
+              drawWidth = CELL;
+              drawHeight = CELL / imgAspect;
+              drawX = cellX;
+              drawY = cellY - (drawHeight - CELL) / 2;
+            }
+
+            // YouTube 썸네일 스케일 처리
+            let imageSrc = "";
+            if (imageValue instanceof File) {
+              imageSrc = URL.createObjectURL(imageValue);
+            } else {
+              imageSrc = imageValue;
+            }
+
+            if (imageSrc.includes("ytimg.com")) {
+              const scale = 1.4;
+              const scaledW = drawWidth * scale;
+              const scaledH = drawHeight * scale;
+              drawX = cellX - (scaledW - CELL) / 2;
+              drawY = cellY - (scaledH - CELL) / 2;
+              drawWidth = scaledW;
+              drawHeight = scaledH;
+            }
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(cellX, cellY, CELL, CELL);
+            ctx.clip();
+
+            ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+            ctx.restore();
+
+            // File 객체 URL 정리
+            if (imageValue instanceof File) {
+              URL.revokeObjectURL(imageSrc);
+            }
+          } else if (!imageValue) {
+            // 이미지가 없을 때
+            ctx.fillStyle = "#aaa";
+            ctx.font = "12px Arial, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("No Image", cellX + CELL / 2, cellY + CELL / 2);
+          }
         }
       });
 
-      // 모든 이미지 그리기 완료 대기
-      await Promise.all(promises);
-
-      // 3. Canvas를 Blob으로 변환하여 다운로드
+      // 4. Canvas를 Blob으로 변환하여 다운로드
       canvas.toBlob(
         (blob) => {
           if (!blob) return;
