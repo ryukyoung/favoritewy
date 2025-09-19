@@ -1,8 +1,8 @@
-// src/pages/Home.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "../lib/firebase";
+import { db, auth } from "../lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { signInAnonymously } from "firebase/auth";
 
 const logo = "../assets/logo.png";
 
@@ -13,17 +13,28 @@ export default function Home() {
   const startMulti = async () => {
     try {
       setCreating(true);
+
+      // ✅ 익명 로그인 보장
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+
       const roomId = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+
       await setDoc(doc(db, "rooms", roomId), {
         titles: [],
         participants: [],
+        ownerUid: auth.currentUser?.uid ?? null, // 선택
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
       nav(`/multi/${roomId}`);
     } catch (e) {
-      console.error(e);
-      alert("방 만들기에 실패했어요. Firestore 설정/권한을 확인해 주세요.");
+      console.error("create room failed:", e);
+      alert(
+        "방 만들기에 실패했어요. 콘솔과 Firestore 규칙/인증 설정을 확인해 주세요."
+      );
       setCreating(false);
     }
   };
@@ -49,12 +60,11 @@ export default function Home() {
           flexDirection: "column",
           alignItems: "center",
           gap: 40,
-          width: "100%", // ✅ 가로폭 확보
           maxWidth: 520, // ✅ 원하는 최대 폭
           boxSizing: "border-box", // ✅ 패딩 포함 계산
         }}
       >
-        <img src={logo} alt="logo" style={{ display: "block" }} />
+        <img src={logo} alt="logo" />
 
         {/* 버튼 행 */}
         <div

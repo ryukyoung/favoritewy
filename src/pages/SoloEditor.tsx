@@ -14,6 +14,9 @@ import CollageBoardSingle from "../components/CollageBoardSingle";
 import { toPng } from "html-to-image";
 import { useNavigate } from "react-router-dom";
 
+// ✅ 브라우저 이미지 압축
+import imageCompression from "browser-image-compression";
+
 // === Solo 전용: 총 10칸 ===
 const SOLO_COLS = 10; // 10개 고정
 const CELL = 160;
@@ -71,6 +74,22 @@ async function idbGet(key: string): Promise<Blob | null> {
     req.onsuccess = () => resolve((req.result as Blob) ?? null);
     req.onerror = () => reject(req.error);
   });
+}
+
+// ✅ 파일 압축 유틸 (대략 1MB 이하, 긴 변 1200px)
+async function compressIfNeeded(file: File): Promise<Blob> {
+  const opts = {
+    maxSizeMB: 1,
+    maxWidthOrHeight: 1200,
+    useWebWorker: true,
+    initialQuality: 0.85,
+  };
+  try {
+    if (file.size <= 1.2 * 1024 * 1024) return file;
+    return await imageCompression(file, opts);
+  } catch {
+    return file;
+  }
 }
 
 export default function SoloEditor() {
@@ -170,7 +189,7 @@ export default function SoloEditor() {
     localStorage.setItem("solo:bgKey", bgKey);
   }, [bgKey]);
 
-  // 이미지 변경 핸들러 + 영구 저장
+  // 이미지 변경 핸들러 + (압축 후) 영구 저장
   const onChangeImage = (idx: number, v: File | string | null) => {
     setImages((prev) => {
       const next = [...prev];
@@ -188,14 +207,22 @@ export default function SoloEditor() {
       }
 
       if (v instanceof File) {
-        // 1) IndexedDB에 Blob 저장
-        void idbSet(`img:${idx}`, v);
-        // 2) localStorage의 URL 키 제거
-        localStorage.removeItem(`solo:imgUrl:${idx}`);
-        // 3) 미리보기 위해 blob:URL 생성
-        const u = URL.createObjectURL(v);
-        blobUrlMapRef.current.set(idx, u);
-        next[idx] = u;
+        (async () => {
+          // 🔽 압축
+          const blob = await compressIfNeeded(v);
+          // 1) IndexedDB에 Blob 저장
+          await idbSet(`img:${idx}`, blob);
+          // 2) localStorage의 URL 키 제거
+          localStorage.removeItem(`solo:imgUrl:${idx}`);
+          // 3) 미리보기 위해 blob:URL 생성
+          const u = URL.createObjectURL(blob);
+          blobUrlMapRef.current.set(idx, u);
+          setImages((p) => {
+            const nn = [...p];
+            nn[idx] = u;
+            return nn;
+          });
+        })();
       } else if (typeof v === "string") {
         // 외부 URL or dataURL → localStorage에 저장
         localStorage.setItem(`solo:imgUrl:${idx}`, v);
@@ -270,8 +297,9 @@ export default function SoloEditor() {
         gap: 10,
       }}
     >
-      {idxs.map((i) => {
+      {idxs.map((i, idx) => {
         const cfg = SOLO_CONFIGS[i];
+        const spanAll = idxs.length === 1 && cols > 1; // ✅ 마지막 줄 1칸이면 전체 폭 사용
         return (
           <div
             key={i}
@@ -280,6 +308,7 @@ export default function SoloEditor() {
               flexDirection: "column",
               alignItems: "stretch",
               gap: 6,
+              gridColumn: spanAll ? "1 / -1" : undefined,
             }}
           >
             <div
@@ -333,6 +362,7 @@ export default function SoloEditor() {
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
+            color: "#000",
           }}
         >
           {/* 간단한 화살표 아이콘 */}
@@ -380,7 +410,7 @@ export default function SoloEditor() {
           />
         </div>
 
-        {/* 선택 그리드: 3 / 3 / 3 / 1 */}
+        {/* 선택 그리드: 3 / 3 / 3 / 1(가득폭) */}
         <div style={{ display: "grid", gap: 12 }}>
           {renderRow(row1, 3)}
           {renderRow(row2, 3)}

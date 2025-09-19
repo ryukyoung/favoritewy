@@ -25,6 +25,9 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
+// ✅ 추가: 브라우저 이미지 압축
+import imageCompression from "browser-image-compression";
+
 const IMG_COLS = COLUMN_CONFIGS.length;
 const GRID_ROWS = 4;
 const GRID_COLS = Math.ceil(IMG_COLS / GRID_ROWS);
@@ -44,10 +47,34 @@ const BOTTOM = 110;
 const GRID_W = IMG_COLS * CELL + (IMG_COLS - 1) * GAP;
 const BOARD_W = LEFT_SIDE + RIGHT_SIDE + GRID_W;
 
+// ✅ 업로드 유틸(메타데이터 포함)
 export async function uploadImageAndGetUrl(file: File, path: string) {
   const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file);
+  await uploadBytes(storageRef, file, {
+    contentType: file.type || "image/jpeg",
+  });
   return await getDownloadURL(storageRef);
+}
+
+// ✅ 파일 압축 유틸
+async function compressIfNeeded(file: File) {
+  const opts = {
+    maxSizeMB: 1, // 대략 1MB 목표
+    maxWidthOrHeight: 1200, // 긴 변 기준 리사이즈
+    useWebWorker: true,
+    initialQuality: 0.85,
+  };
+  try {
+    if (file.size <= 1.2 * 1024 * 1024) return file; // 이미 충분히 작으면 그대로
+    return await imageCompression(file, opts);
+  } catch {
+    return file; // 실패 시 원본 사용
+  }
+}
+
+// 파일명 안전하게
+function safeName(name: string) {
+  return (name || "img").replace(/[^\w.-]+/g, "_");
 }
 
 export default function MultiEditor() {
@@ -57,7 +84,7 @@ export default function MultiEditor() {
   // 인원 & 데이터
   const [count, setCount] = useState(2);
   const [participants, setParticipants] = useState<Participant[]>(
-    Array.from({ length: 2 }, (_) => ({
+    Array.from({ length: 2 }, () => ({
       nickname: "",
       images: Array(IMG_COLS).fill(null),
     }))
@@ -259,13 +286,19 @@ export default function MultiEditor() {
 
       if (v instanceof File) {
         if (!roomId) return next; // 방 생성 전 가드
-        const key = `${roomId}/${idx}-${imgIdx}-${Date.now()}-${v.name}`;
-        uploadImageAndGetUrl(v, key)
-          .then((url) => saveToServer(url))
-          .catch((e) => {
+        (async () => {
+          const compressed = await compressIfNeeded(v);
+          const key = `${roomId}/${idx}-${imgIdx}-${Date.now()}-${safeName(
+            v.name
+          )}`;
+          try {
+            const url = await uploadImageAndGetUrl(compressed, key);
+            saveToServer(url);
+          } catch (e) {
             console.error(e);
             alert("이미지 업로드 실패");
-          });
+          }
+        })();
       } else {
         saveToServer(v as string | null);
       }
@@ -356,7 +389,6 @@ export default function MultiEditor() {
             cursor: "pointer",
           }}
         >
-          {/* 간단한 화살표 아이콘 */}
           <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
         </button>
         <h2
@@ -553,8 +585,6 @@ export default function MultiEditor() {
           type="button"
           onClick={() => {
             setBgKey("bg1");
-            // 원하면 Firestore에도 반영 가능:
-            // if (roomRef) void updateDoc(roomRef, { bgKey: "bg1", updatedAt: serverTimestamp() });
           }}
           aria-pressed={bgKey === "bg1"}
           style={{
@@ -581,7 +611,6 @@ export default function MultiEditor() {
           type="button"
           onClick={() => {
             setBgKey("bg2");
-            // if (roomRef) void updateDoc(roomRef, { bgKey: "bg2", updatedAt: serverTimestamp() });
           }}
           aria-pressed={bgKey === "bg2"}
           style={{
