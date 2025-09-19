@@ -75,6 +75,41 @@ async function idbGet(key: string): Promise<Blob | null> {
     req.onerror = () => reject(req.error);
   });
 }
+// SoloEditor.tsx 안에 유틸 추가
+async function waitForImages(root: HTMLElement) {
+  const imgs = Array.from(root.querySelectorAll("img"));
+  // CSS background-image도 기다리고 싶으면, 별도로 preloadImage(selectedBgUrl)도 호출
+  await Promise.all(
+    imgs.map(async (img) => {
+      try {
+        if ("decode" in img && typeof img.decode === "function") {
+          await img.decode();
+        } else {
+          await new Promise<void>((res, rej) => {
+            if (img.complete && img.naturalWidth) return res();
+            img.addEventListener("load", () => res(), { once: true });
+            img.addEventListener("error", () => rej(new Error("img error")), {
+              once: true,
+            });
+          });
+        }
+      } catch {
+        /* ignore decode error */
+      }
+    })
+  );
+}
+
+// 배경도 미리 로딩
+function preloadImage(src: string, cors = false) {
+  return new Promise<void>((res, rej) => {
+    const im = new Image();
+    if (cors) im.crossOrigin = "anonymous";
+    im.onload = () => res();
+    im.onerror = () => rej(new Error("bg load error"));
+    im.src = src;
+  });
+}
 
 // ✅ 파일 압축 유틸 (대략 1MB 이하, 긴 변 1200px)
 async function compressIfNeeded(file: File): Promise<Blob> {
@@ -259,17 +294,34 @@ export default function SoloEditor() {
   // ===== PNG 저장용 참조 + 함수 =====
   const boardContentRef = useRef<HTMLDivElement>(null);
   const handleSave = useCallback(async () => {
-    if (!boardContentRef.current) return;
+    const root = boardContentRef.current;
+    if (!root) return;
+
+    // 1) 폰트
     if ((document as any).fonts?.ready) {
       try {
         await (document as any).fonts.ready;
       } catch {}
     }
+
+    // 2) 배경 선로딩 (정적 import라면 CORS 불필요)
     try {
-      const dataUrl = await toPng(boardContentRef.current, {
+      await preloadImage(selectedBgUrl);
+    } catch {}
+
+    // 3) 콘텐츠 내부 IMG 모두 decode 대기
+    await waitForImages(root);
+
+    try {
+      const dataUrl = await toPng(root, {
         width: PREVIEW_BOARD_W,
         pixelRatio: 1,
         cacheBust: true,
+        // fetch 옵션 + useCORS 힌트
+        fetchRequestInit: { mode: "cors", credentials: "omit" } as any,
+        // html-to-image 버전에 따라 useCORS가 있다면 true로
+        // @ts-ignore
+        useCORS: true,
         style: { transform: "none", transformOrigin: "top left" },
       });
       const a = document.createElement("a");
@@ -281,7 +333,7 @@ export default function SoloEditor() {
       console.error(err);
       alert("이미지 저장에 실패했어요. (콘솔 확인)");
     }
-  }, []);
+  }, [selectedBgUrl]);
 
   // === 선택창 분배: 3,3,3,1 (총 10칸) ===
   const row1 = [0, 1, 2];
