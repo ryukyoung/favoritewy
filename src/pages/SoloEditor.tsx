@@ -36,8 +36,8 @@ const PREVIEW_BOARD_H =
   TOP + BOTTOM + PREVIEW_ROWS * CELL + (PREVIEW_ROWS - 1) * GAP;
 
 // ✅ 배경 파일(두 장) - public 폴더로 이동 권장
-const BG1 = "/bg-9.png";
-const BG2 = "/bg-8.png";
+const BG1 = "../assets/bg-9.png";
+const BG2 = "../assets/bg-8.png";
 
 // === 유틸리티 함수들을 컴포넌트 외부로 이동 ===
 
