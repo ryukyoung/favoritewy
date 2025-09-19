@@ -17,7 +17,6 @@ import { toPng } from "html-to-image";
 import { db, storage } from "../lib/firebase";
 import {
   doc,
-  getDoc,
   setDoc,
   updateDoc,
   serverTimestamp,
