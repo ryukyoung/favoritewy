@@ -321,7 +321,7 @@ export default function SoloEditor() {
           mode: "cors",
           credentials: "omit",
         },
-        filter: (node) => {
+        filter: () => {
           // 불필요한 요소 필터링
           return true;
         },
