@@ -1,7 +1,85 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+// src/components/SmartImageCell.tsx
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import type { PresetItem, ColumnConfig } from "../columnConfig";
 import { getYoutubeId, getYoutubeThumb } from "../youtubeUtil";
+
+/** 긴 라벨을 최대 N줄로 맞추고, 넘치면 폰트를 줄여서 맞춘 뒤 그래도 넘치면 줄수 클램프 */
+function AutoFitLabel({
+  text,
+  maxLines = 2,
+  baseFont = 14, // 시작 폰트(px)
+  minFont = 1, // 최소 폰트(px)
+  lineH = 1.3, // unitless line-height
+  style = {},
+}: {
+  text: string;
+  maxLines?: number;
+  baseFont?: number;
+  minFont?: number;
+  lineH?: number;
+  style?: CSSProperties;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    // 측정 준비: 여러 줄 허용 + 단어 쪼개기
+    el.style.whiteSpace = "normal";
+    (el.style as any).overflowWrap = "anywhere";
+    el.style.wordBreak = "break-word";
+    el.style.display = "block";
+    el.style.lineHeight = String(lineH);
+
+    let size = baseFont;
+    el.style.fontSize = `${size}px`;
+
+    const fit = () => {
+      // 현재 폰트 사이즈 기준 허용 높이
+      const allow = maxLines * lineH * size + 0.5;
+      // 필요 시 1px씩 감소
+      while (el.scrollHeight > allow && size > minFont) {
+        size -= 1;
+        el.style.fontSize = `${size}px`;
+      }
+      // 그래도 넘치면 마지막으로 3줄 클램프
+      if (el.scrollHeight > maxLines * lineH * size + 0.5) {
+        el.style.display = "-webkit-box";
+        (el.style as any).WebkitLineClamp = String(maxLines);
+        (el.style as any).WebkitBoxOrient = "vertical";
+        el.style.overflow = "hidden";
+      }
+    };
+
+    // 레이아웃 적용 후 측정
+    requestAnimationFrame(fit);
+  }, [text, maxLines, baseFont, minFont, lineH]);
+
+  return (
+    <span
+      ref={ref}
+      style={{
+        whiteSpace: "normal",
+        overflowWrap: "anywhere",
+        wordBreak: "break-word",
+        lineHeight: lineH,
+        fontSize: baseFont,
+        ...style,
+      }}
+    >
+      {text}
+    </span>
+  );
+}
 
 type Props = {
   value: File | string | null;
@@ -16,23 +94,13 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
 
   const valueSummary = (() => {
     if (!value) return "선택 없음";
-
-    // 1) 파일이면 파일명
     if (value instanceof File) return `파일(${value.name})`;
-
-    // 2) 문자열(프리셋/URL/텍스트)인 경우
     if (typeof value === "string") {
-      // 2-1) 프리셋 URL과 매칭되면 프리셋 이름(label) 표시
       const presetLabel = config.presets?.find((p) => p.url === value)?.label;
       if (presetLabel) return presetLabel;
-
-      // 2-2) 유효한 URL이면 간단 요약 (원하면 도메인/경로 파싱해서 더 예쁘게 표시 가능)
       if (value.startsWith("http")) return "이미지 선택됨";
-
-      // 2-3) 그 외는 텍스트 그대로 보여주기
       return value || "텍스트";
     }
-
     return "선택됨";
   })();
 
@@ -45,7 +113,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const MARGIN = 8;
-    const PANEL_W = Math.min(360, Math.max(260, r.width));
+    const PANEL_W = Math.min(380, Math.max(300, r.width));
     const belowSpace = vh - r.bottom;
     const aboveSpace = r.top;
     const panelH = 340;
@@ -152,14 +220,22 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
           }}
           style={{
             padding: "10px 12px",
-            fontSize: 14,
             borderRadius: 10,
             border: "1px solid #ddd",
             background: "#fff",
+            width: "100%",
+            display: "block",
+            textAlign: "center",
           }}
           title={p.url || "URL 미지정"}
         >
-          {p.label}
+          <AutoFitLabel
+            text={p.label}
+            maxLines={2} // 2줄 넘치면 폰트 줄임
+            baseFont={14} // 시작 폰트
+            minFont={8} // 최소 폰트
+            lineH={1.2} // 라인 높이
+          />
         </button>
       ))}
     </div>
@@ -220,7 +296,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
             onKeyDown={(e) => {
               if (e.key === "Enter") applyYoutubeUrl();
             }}
-            placeholder="예) https://youtu.be/abcdEFG1234 또는 abcdEFG1234"
+            placeholder="예) https://youtu.be/abcdEFG1234"
             style={{
               padding: "10px 12px",
               fontSize: 14,
@@ -240,7 +316,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
               whiteSpace: "nowrap",
             }}
           >
-            적용
+            선택
           </button>
         </div>
       );
@@ -256,6 +332,8 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         border: "1px solid #e9e9e9",
         borderRadius: 12,
         background: "#fff",
+        boxSizing: "border-box",
+        minWidth: 0,
       }}
     >
       <button
@@ -268,7 +346,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 8,
-          padding: "10px 12px",
+          padding: "11px 12px",
           background: "#fff",
           border: "none",
           outline: "none",
@@ -276,7 +354,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       >
         <div
           style={{
-            fontSize: 12,
+            fontSize: 13,
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -307,7 +385,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
             style={overlayStyle}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ padding: 10 }}>
+            <div style={{ padding: 13 }}>
               <OverlayBody />
             </div>
           </div>,

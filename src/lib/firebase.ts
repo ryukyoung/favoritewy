@@ -5,14 +5,15 @@ import { getStorage } from "firebase/storage";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBFaQ8-NsD6gKs-sKvFf6hckgByIN3jfII",
-  authDomain: "wyfavorite-f73e6.firebaseapp.com",
-  projectId: "wyfavorite-f73e6",
-  storageBucket: "wyfavorite-f73e6.appspot.com",
-  messagingSenderId: "405918819454",
-  appId: "1:405918819454:web:afc0dde91950cb1831e42f",
-  measurementId: "G-GV41STR0Y6",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
+
 // 중복 초기화 방지
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 

@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { db } from "../lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
+const logo = "../assets/logo.png";
+
 export default function Home() {
   const nav = useNavigate();
   const [creating, setCreating] = useState(false);
@@ -11,17 +13,13 @@ export default function Home() {
   const startMulti = async () => {
     try {
       setCreating(true);
-      // 20자 정도의 짧은 랜덤 ID
       const roomId = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
-
-      // 방 문서 초기화(비어 있어도 OK)
       await setDoc(doc(db, "rooms", roomId), {
-        titles: [], // 필요하면 기본 타이틀 넣기
-        participants: [], // 빈 참가자 목록
+        titles: [],
+        participants: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-
       nav(`/multi/${roomId}`);
     } catch (e) {
       console.error(e);
@@ -31,21 +29,97 @@ export default function Home() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
-      <div style={{ textAlign: "center" }}>
-        <h1 style={{ marginBottom: 24 }}>이미지 콜라주 메이커</h1>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          <button onClick={() => nav("/solo")} style={{ padding: "10px 16px" }}>
+    <div
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        position: "relative",
+        overflow: "hidden",
+        padding: "0 16px",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* 중앙 래퍼: 실제 가로폭 확보 */}
+      <div
+        style={{
+          transform: "translateY(10px)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 40,
+          width: "100%", // ✅ 가로폭 확보
+          maxWidth: 520, // ✅ 원하는 최대 폭
+          boxSizing: "border-box", // ✅ 패딩 포함 계산
+        }}
+      >
+        <img src={logo} alt="logo" style={{ display: "block" }} />
+
+        {/* 버튼 행 */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "stretch",
+            flexDirection: "row",
+            width: "100%", // ✅ 래퍼 기준 100%
+            gap: 16, // (선택) 간격 더 자연스럽게
+          }}
+        >
+          {/* 동일 폭을 원하면 flex:1 사용 */}
+          <button
+            onClick={() => nav("/solo")}
+            style={{
+              flex: 1, // ✅ 두 버튼 동일폭
+              padding: "12px 12px",
+              background: "#ff7ed0",
+              color: "#fff",
+              borderRadius: 10,
+              border: 0,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontSize: 16,
+            }}
+          >
             1인(혼자 만들기)
           </button>
+
           <button
             onClick={startMulti}
             disabled={creating}
-            style={{ padding: "10px 16px", opacity: creating ? 0.6 : 1 }}
+            style={{
+              flex: 1, // ✅ 두 버튼 동일폭
+              padding: "12px 12px",
+              background: "#ff7ed0",
+              color: "#fff",
+              borderRadius: 10,
+              border: 0,
+              fontWeight: 500,
+              fontSize: 16,
+              opacity: creating ? 0.8 : 1,
+              cursor: creating ? "not-allowed" : "pointer",
+            }}
           >
-            {creating ? "방 만드는 중..." : "다인(여러 명 함께)"}
+            {creating ? "방 만드는 중..." : "다인(함께 만들기)"}
           </button>
         </div>
+      </div>
+
+      {/* 하단 저작권 문구 */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 12,
+          left: 0,
+          right: 0,
+          textAlign: "center",
+          fontSize: 12,
+          color: "#999",
+          pointerEvents: "none",
+        }}
+      >
+        X @ghbgif
       </div>
     </div>
   );

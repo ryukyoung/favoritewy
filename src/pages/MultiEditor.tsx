@@ -28,19 +28,21 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 const IMG_COLS = COLUMN_CONFIGS.length;
 const GRID_ROWS = 4;
 const GRID_COLS = Math.ceil(IMG_COLS / GRID_ROWS);
-
+const BG1 = "../assets/bg-5.png";
+const BG2 = "../assets/bg-10.png";
 // 기본 타이틀
 const DEFAULT_TITLES = COLUMN_CONFIGS.map((c) => c.title);
 
 // 보드 규격
-const CELL = 160;
-const GAP = 20;
-const SIDE = 140;
-const TOP = 340;
-const BOTTOM = 160;
+const CELL = 120;
+const GAP = 15;
+const LEFT_SIDE = 120;
+const RIGHT_SIDE = 100;
+const TOP = 280;
+const BOTTOM = 110;
 
 const GRID_W = IMG_COLS * CELL + (IMG_COLS - 1) * GAP;
-const BOARD_W = 2 * SIDE + GRID_W;
+const BOARD_W = LEFT_SIDE + RIGHT_SIDE + GRID_W;
 
 export async function uploadImageAndGetUrl(file: File, path: string) {
   const storageRef = ref(storage, path);
@@ -56,11 +58,18 @@ export default function MultiEditor() {
   const [count, setCount] = useState(2);
   const [participants, setParticipants] = useState<Participant[]>(
     Array.from({ length: 2 }, (_, i) => ({
-      nickname: `User${i + 1}`,
+      nickname: "",
       images: Array(IMG_COLS).fill(null),
     }))
   );
   const titles = DEFAULT_TITLES;
+
+  const [countField, setCountField] = useState(String(count));
+
+  // ✅ 배경 선택 상태
+  // bgKey: "bg1" | "bg2"
+  const [bgKey, setBgKey] = useState<"bg1" | "bg2">("bg1");
+  const selectedBgUrl = bgKey === "bg1" ? BG1 : BG2;
 
   // 방 레퍼런스 (roomId 있을 때만)
   const roomRef = useMemo(
@@ -76,6 +85,7 @@ export default function MultiEditor() {
       const initial = {
         titles: DEFAULT_TITLES,
         participants: participants, // 현재 로컬 상태로 초기화
+        count: participants.length,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -85,25 +95,74 @@ export default function MultiEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  // 방 로드(링크로 직접 들어온 경우 포함)
+  // helpers
+  const clamp = (n: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, n));
+  const makeEmptyParticipant = (i: number): Participant => ({
+    nickname: "",
+    images: Array(IMG_COLS).fill(null),
+  });
+
   useEffect(() => {
     if (!roomRef) return;
     let mounted = true;
+
     (async () => {
       const snap = await getDoc(roomRef);
       if (!mounted) return;
+
       if (snap.exists()) {
         const data = snap.data() as any;
-        if (data?.participants) setParticipants(data.participants);
+
+        // participants 보정 (최소 2명)
+        let p: Participant[] = Array.isArray(data?.participants)
+          ? [...data.participants]
+          : [];
+        if (p.length < 2) {
+          for (let i = p.length; i < 2; i++) p.push(makeEmptyParticipant(i));
+        }
+
+        // count 보정 (2~10로 클램프, 기본은 participants 길이)
+        const c = clamp(
+          typeof data?.count === "number" ? data.count : p.length || 2,
+          2,
+          10
+        );
+
+        // 상태 반영
+        setParticipants(p);
+        setCount(c);
+
+        // Firestore에도 보정값 반영(선택: 데이터 정리용)
+        if (
+          data?.count !== c ||
+          (Array.isArray(data?.participants) &&
+            data.participants.length !== p.length)
+        ) {
+          await updateDoc(roomRef, {
+            participants: p,
+            count: c,
+            updatedAt: serverTimestamp(),
+          });
+        }
       } else {
+        // 문서가 없다면 기본값으로 생성 (최소 2명 보장)
+        const base: Participant[] =
+          participants.length >= 2
+            ? participants
+            : [makeEmptyParticipant(0), makeEmptyParticipant(1)];
         await setDoc(roomRef, {
           titles: DEFAULT_TITLES,
-          participants,
+          participants: base,
+          count: base.length,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+        setParticipants(base);
+        setCount(base.length);
       }
     })();
+
     return () => {
       mounted = false;
     };
@@ -119,7 +178,7 @@ export default function MultiEditor() {
       if (next.length < c) {
         while (next.length < c) {
           next.push({
-            nickname: `User${next.length + 1}`,
+            nickname: "",
             images: Array(IMG_COLS).fill(null),
           });
         }
@@ -130,11 +189,26 @@ export default function MultiEditor() {
       if (roomRef) {
         void updateDoc(roomRef, {
           participants: next,
+          count: c,
           updatedAt: serverTimestamp(),
         });
       }
       return next;
     });
+  };
+  // count가 바뀌면 입력창도 동기화
+  useEffect(() => {
+    setCountField(String(count));
+  }, [count]);
+
+  // 입력 확정 처리(클램프 포함).
+  const commitCountFromField = () => {
+    const n = parseInt(countField, 10);
+    if (Number.isNaN(n)) {
+      setCountField(String(count));
+      return;
+    }
+    onChangeCount(Math.min(10, Math.max(2, n)));
   };
 
   const updateNickname = (idx: number, name: string) => {
@@ -150,6 +224,17 @@ export default function MultiEditor() {
       return next;
     });
   };
+
+  useEffect(() => {
+    const onImgError = (e: Event) => {
+      const t = e.target as HTMLImageElement;
+      if (t?.tagName === "IMG") {
+        console.warn("[IMG LOAD ERROR]", t.src);
+      }
+    };
+    window.addEventListener("error", onImgError, true);
+    return () => window.removeEventListener("error", onImgError, true);
+  }, []);
 
   // 이미지/프리셋/유튜브 썸네일 업데이트(+Storage 업로드)
   const updateImage = (
@@ -223,7 +308,7 @@ export default function MultiEditor() {
     try {
       const dataUrl = await toPng(boardContentRef.current, {
         width: BOARD_W,
-        pixelRatio: 2,
+        pixelRatio: 1,
         cacheBust: true,
         style: { transform: "none", transformOrigin: "top left" },
       });
@@ -244,28 +329,133 @@ export default function MultiEditor() {
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>멀티 취향표 편집기</h2>
-
+    <div style={{ padding: 16, backgroundColor: "#fff" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto 1fr auto",
+          gap: 16,
+          alignItems: "center",
+          marginBottom: 20,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => nav("/")}
+          aria-label="뒤로가기"
+          title="뒤로가기"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            border: "1px solid #ddd",
+            background: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          {/* 간단한 화살표 아이콘 */}
+          <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
+        </button>
+        <h2
+          style={{
+            fontSize: 20,
+            color: "#000",
+            justifySelf: "center",
+            margin: 0,
+          }}
+        >
+          취향표 편집기
+        </h2>
+        <button
+          onClick={() => {
+            navigator.clipboard
+              .writeText(window.location.href)
+              .then(() => alert("현재 방 주소를 복사했습니다."))
+              .catch(() => alert("복사를 실패했습니다."));
+          }}
+          style={{
+            padding: "10px 12px",
+            fontSize: 16,
+            borderRadius: 12,
+            border: "1px solid #ddd",
+            background: "#fff",
+          }}
+        >
+          URL 복사
+        </button>
+      </div>
       <section style={{ display: "grid", gap: 16 }}>
-        <div>
-          <label style={{ fontSize: 14, display: "block", marginBottom: 6 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 20,
+          }}
+        >
+          <label style={{ fontSize: 18, display: "block", color: "#000" }}>
             인원 수 (2~10)
           </label>
-          <input
-            type="number"
-            min={2}
-            max={10}
-            value={count}
-            onChange={(e) => onChangeCount(Number(e.target.value))}
-            style={{
-              width: 140,
-              padding: "12px 14px",
-              fontSize: 16,
-              borderRadius: 10,
-              border: "1px solid #ddd",
-            }}
-          />
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => onChangeCount(Math.max(2, count - 1))}
+              disabled={count <= 2}
+              style={{
+                padding: "10px 10px",
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: "#fff",
+                color: "#000",
+              }}
+              aria-label="감소"
+            >
+              −
+            </button>
+
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="\d*"
+              value={countField}
+              onChange={(e) => {
+                const onlyDigits = e.target.value.replace(/[^\d]/g, "");
+                setCountField(onlyDigits);
+              }}
+              onBlur={commitCountFromField}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitCountFromField();
+              }}
+              placeholder="2~10"
+              style={{
+                width: 60,
+                padding: "10px 12px",
+                fontSize: 16,
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                textAlign: "center",
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={() => onChangeCount(Math.min(10, count + 1))}
+              disabled={count >= 10}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: "#fff",
+                color: "#000",
+              }}
+              aria-label="증가"
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div style={{ display: "grid", gap: 20 }}>
@@ -279,10 +469,12 @@ export default function MultiEditor() {
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  marginBottom: 10,
+                  marginBottom: 20,
                 }}
               >
-                <strong style={{ width: 48, fontSize: 14 }}>{i + 1}번</strong>
+                <strong style={{ width: 48, fontSize: 18, color: "#000" }}>
+                  {i + 1}번
+                </strong>
                 <input
                   value={p.nickname}
                   onChange={(e) => updateNickname(i, e.target.value)}
@@ -291,8 +483,9 @@ export default function MultiEditor() {
                     padding: "12px 14px",
                     fontSize: 16,
                     borderRadius: 10,
-                    border: "1px solid #ddd",
                     flex: 1,
+                    border: "none",
+                    backgroundColor: "#f6f6f6",
                   }}
                 />
               </div>
@@ -318,13 +511,13 @@ export default function MultiEditor() {
                     >
                       <div
                         style={{
-                          fontSize: 12,
-                          fontWeight: 700,
+                          fontSize: 16,
+                          fontWeight: 500,
                           lineHeight: 1.2,
                           padding: "2px 2px",
-                          whiteSpace: "nowrap",
+                          whiteSpace: "pre-line",
                           overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          color: "#000",
                         }}
                         title={cfg.title}
                       >
@@ -345,46 +538,78 @@ export default function MultiEditor() {
         </div>
       </section>
 
-      <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
+      {/* ✅ 배경 선택 컨트롤 (CollageBoard 미리보기 위) */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginTop: 12,
+          justifyContent: "flex-end",
+        }}
+      >
+        <span style={{ fontSize: 14, marginRight: 6 }}>배경</span>
         <button
-          onClick={handleSave}
-          style={{
-            width: "100%",
-            padding: "14px 16px",
-            fontSize: 16,
-            borderRadius: 12,
-            border: "1px solid #ddd",
-            background: "#fff",
-          }}
-        >
-          PNG로 저장
-        </button>
-
-        {/* 공유용 주소 복사(선택) */}
-        <button
+          type="button"
           onClick={() => {
-            navigator.clipboard
-              .writeText(window.location.href)
-              .then(() => alert("현재 방 주소를 복사했어요!"))
-              .catch(() => alert("복사에 실패했어요."));
+            setBgKey("bg1");
+            // 원하면 Firestore에도 반영 가능:
+            // if (roomRef) void updateDoc(roomRef, { bgKey: "bg1", updatedAt: serverTimestamp() });
           }}
+          aria-pressed={bgKey === "bg1"}
           style={{
-            width: "100%",
-            padding: "14px 16px",
-            fontSize: 16,
-            borderRadius: 12,
-            border: "1px solid #ddd",
+            padding: 6,
+            borderRadius: 10,
+            border: bgKey === "bg1" ? "2px solid #333" : "1px solid #ddd",
             background: "#fff",
+            cursor: "pointer",
           }}
+          title="배경 1"
         >
-          방 주소 복사
+          <div
+            style={{
+              width: 56,
+              height: 36,
+              backgroundImage: `url(${BG1})`,
+              backgroundSize: "cover",
+              backgroundPosition: "top center",
+              borderRadius: 8,
+            }}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setBgKey("bg2");
+            // if (roomRef) void updateDoc(roomRef, { bgKey: "bg2", updatedAt: serverTimestamp() });
+          }}
+          aria-pressed={bgKey === "bg2"}
+          style={{
+            padding: 6,
+            borderRadius: 10,
+            border: bgKey === "bg2" ? "2px solid #333" : "1px solid #ddd",
+            background: "#fff",
+            cursor: "pointer",
+          }}
+          title="배경 2"
+        >
+          <div
+            style={{
+              width: 56,
+              height: 36,
+              backgroundImage: `url(${BG2})`,
+              backgroundSize: "cover",
+              backgroundPosition: "top center",
+              borderRadius: 8,
+            }}
+          />
         </button>
       </div>
 
       <section
         ref={previewWrapRef}
         style={{
-          marginTop: 20,
+          marginTop: 10,
           width: "100%",
           overflow: "auto",
           border: "1px solid #eee",
@@ -407,6 +632,10 @@ export default function MultiEditor() {
               transformOrigin: "top left",
               width: BOARD_W,
               height: boardHeight,
+              backgroundImage: `url(${selectedBgUrl})`,
+              backgroundSize: "cover",
+              backgroundPosition: "top center",
+              backgroundRepeat: "no-repeat",
             }}
             ref={boardContentRef}
           >
@@ -415,14 +644,38 @@ export default function MultiEditor() {
               titles={titles}
               cell={CELL}
               gap={GAP}
-              margins={{ top: TOP, bottom: BOTTOM, side: SIDE }}
+              margins={{
+                top: TOP,
+                bottom: BOTTOM,
+                left: LEFT_SIDE,
+                right: RIGHT_SIDE,
+              }}
               imgCols={IMG_COLS}
               boardWidth={BOARD_W}
               boardHeight={boardHeight}
+              bgKey={bgKey}
             />
           </div>
         </div>
       </section>
+
+      <div style={{ marginTop: 20, display: "grid", gap: 8 }}>
+        <button
+          onClick={handleSave}
+          style={{
+            color: "#fff",
+            width: "100%",
+            padding: "14px 16px",
+            fontSize: 17,
+            borderRadius: 12,
+            background: "#ff7ed0",
+            fontWeight: 500,
+            cursor: "pointer",
+          }}
+        >
+          취향표 저장
+        </button>
+      </div>
     </div>
   );
 }
