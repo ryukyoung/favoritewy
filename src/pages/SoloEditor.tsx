@@ -11,7 +11,6 @@ import SmartImageCell from "../components/SmartImageCell";
 import type { Participant } from "../types";
 import { COLUMN_CONFIGS } from "../columnConfig";
 import CollageBoardSingle from "../components/CollageBoardSingle";
-import { toPng } from "html-to-image";
 import { useNavigate } from "react-router-dom";
 
 // ✅ 브라우저 이미지 압축
@@ -36,13 +35,169 @@ const PREVIEW_ROWS = 3; // 4/4/2 → 3행
 const PREVIEW_BOARD_H =
   TOP + BOTTOM + PREVIEW_ROWS * CELL + (PREVIEW_ROWS - 1) * GAP;
 
-// ✅ 배경 파일(두 장)
-const BG1 = "../assets/bg-9.png";
-const BG2 = "../assets/bg-8.png";
+// ✅ 배경 파일(두 장) - public 폴더로 이동 권장
+const BG1 = "/bg-9.png";
+const BG2 = "/bg-8.png";
+
+// === 유틸리티 함수들을 컴포넌트 외부로 이동 ===
+
+// 이미지 로드 Promise 래퍼
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`이미지 로드 실패: ${src}`));
+    img.src = src;
+  });
+}
+
+// 인덱스를 행/열로 변환
+function idxToWrap(k: number, pattern: number[], prefix: number[]) {
+  let r = 0;
+  for (let i = 0; i < pattern.length; i++) {
+    if (k >= prefix[i] && k < prefix[i + 1]) {
+      r = i;
+      break;
+    }
+  }
+  const c = k - prefix[r];
+  return { wr: r, wc: c };
+}
+
+// 다중 라인 텍스트 그리기
+function drawMultilineText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number
+) {
+  const words = text.split(""); // 한글은 글자 단위로 분할
+  const lines: string[] = [];
+  let currentLine = "";
+
+  // 단어별로 줄 나누기
+  for (const char of words) {
+    const testLine = currentLine + char;
+    const metrics = ctx.measureText(testLine);
+
+    if (metrics.width > maxWidth && currentLine !== "") {
+      lines.push(currentLine);
+      currentLine = char;
+    } else {
+      currentLine = testLine;
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  // 최대 6줄까지만 표시
+  const maxLines = 6;
+  const displayLines = lines.slice(0, maxLines);
+
+  // 여러 줄 중앙 정렬을 위한 시작 Y 계산
+  const totalHeight = displayLines.length * lineHeight;
+  let startY = y - totalHeight / 2 + lineHeight / 2;
+
+  // 각 줄 그리기
+  displayLines.forEach((line, index) => {
+    const currentY = startY + index * lineHeight;
+    ctx.fillText(line, x, currentY);
+  });
+}
+
+// 개별 이미지 셀 그리기
+async function drawImageCell(
+  ctx: CanvasRenderingContext2D,
+  imageValue: File | string | null,
+  x: number,
+  y: number,
+  size: number
+): Promise<void> {
+  // 1. 셀 배경 그리기 (회색 배경 + 검은 테두리)
+  ctx.fillStyle = "#fafafa";
+  ctx.fillRect(x, y, size, size);
+
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, size, size);
+
+  if (!imageValue) {
+    // 이미지가 없을 때 "No Image" 텍스트
+    ctx.fillStyle = "#aaa";
+    ctx.font = "12px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("No Image", x + size / 2, y + size / 2);
+    return;
+  }
+
+  try {
+    let imageSrc: string;
+
+    // File 객체 처리
+    if (imageValue instanceof File) {
+      // File을 blob URL로 변환
+      imageSrc = URL.createObjectURL(imageValue);
+    } else {
+      imageSrc = imageValue;
+    }
+
+    // 이미지 로드 및 그리기
+    const img = await loadImage(imageSrc);
+
+    // 이미지를 셀 크기에 맞춰 그리기 (object-fit: cover 효과)
+    const imgAspect = img.width / img.height;
+    const cellAspect = 1; // 정사각형
+
+    let drawWidth, drawHeight, drawX, drawY;
+
+    if (imgAspect > cellAspect) {
+      // 이미지가 더 넓음 - 높이를 맞추고 좌우 크롭
+      drawHeight = size;
+      drawWidth = size * imgAspect;
+      drawX = x - (drawWidth - size) / 2;
+      drawY = y;
+    } else {
+      // 이미지가 더 높음 - 폭을 맞추고 상하 크롭
+      drawWidth = size;
+      drawHeight = size / imgAspect;
+      drawX = x;
+      drawY = y - (drawHeight - size) / 2;
+    }
+
+    // 클리핑 영역 설정하여 셀 경계 밖으로 나가지 않도록
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + 1, y + 1, size - 2, size - 2); // 테두리 1px 고려
+    ctx.clip();
+
+    ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+    ctx.restore();
+
+    // File 객체였다면 생성한 URL 정리
+    if (imageValue instanceof File) {
+      URL.revokeObjectURL(imageSrc);
+    }
+  } catch (error) {
+    console.error("이미지 셀 그리기 실패:", error);
+    // 실패 시 "No Image" 표시
+    ctx.fillStyle = "#aaa";
+    ctx.font = "12px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Load Failed", x + size / 2, y + size / 2);
+  }
+}
 
 // ===== IndexedDB 아주 얇은 유틸 =====
 const DB_NAME = "solo-editor-v1";
 const STORE = "images";
+
 function idbOpen(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
@@ -54,7 +209,6 @@ function idbOpen(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error);
   });
 }
-await new Promise((r) => requestAnimationFrame(() => r(null)));
 
 async function idbSet(key: string, blob: Blob | null): Promise<void> {
   const db = await idbOpen();
@@ -67,6 +221,7 @@ async function idbSet(key: string, blob: Blob | null): Promise<void> {
     tx.onerror = () => reject(tx.error);
   });
 }
+
 async function idbGet(key: string): Promise<Blob | null> {
   const db = await idbOpen();
   return new Promise((resolve, reject) => {
@@ -75,41 +230,6 @@ async function idbGet(key: string): Promise<Blob | null> {
     const req = os.get(key);
     req.onsuccess = () => resolve((req.result as Blob) ?? null);
     req.onerror = () => reject(req.error);
-  });
-}
-// SoloEditor.tsx 안에 유틸 추가
-async function waitForImages(root: HTMLElement) {
-  const imgs = Array.from(root.querySelectorAll("img"));
-  // CSS background-image도 기다리고 싶으면, 별도로 preloadImage(selectedBgUrl)도 호출
-  await Promise.all(
-    imgs.map(async (img) => {
-      try {
-        if ("decode" in img && typeof img.decode === "function") {
-          await img.decode();
-        } else {
-          await new Promise<void>((res, rej) => {
-            if (img.complete && img.naturalWidth) return res();
-            img.addEventListener("load", () => res(), { once: true });
-            img.addEventListener("error", () => rej(new Error("img error")), {
-              once: true,
-            });
-          });
-        }
-      } catch {
-        /* ignore decode error */
-      }
-    })
-  );
-}
-
-// 배경도 미리 로딩
-function preloadImage(src: string, cors = false) {
-  return new Promise<void>((res, rej) => {
-    const im = new Image();
-    if (cors) im.crossOrigin = "anonymous";
-    im.onload = () => res();
-    im.onerror = () => rej(new Error("bg load error"));
-    im.src = src;
   });
 }
 
@@ -293,54 +413,108 @@ export default function SoloEditor() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // ===== PNG 저장용 참조 + 함수 =====
-  const boardContentRef = useRef<HTMLDivElement>(null);
+  // ===== Canvas로 PNG 저장하는 함수 =====
   const handleSave = useCallback(async () => {
-    const root = boardContentRef.current;
-    if (!root) return;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Canvas 크기 설정
+    canvas.width = PREVIEW_BOARD_W;
+    canvas.height = PREVIEW_BOARD_H;
 
     try {
-      // 배경 이미지를 먼저 로드
-      await preloadImage(selectedBgUrl);
+      // 1. 배경 이미지 로드 및 그리기
+      const bgImg = await loadImage(selectedBgUrl);
+      ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
 
-      // 모든 이미지 로드 대기
-      await waitForImages(root);
+      // 2. 폰트 설정
+      ctx.font = "600 22px Arial, sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
 
-      // 추가 대기 시간
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // 3. 닉네임 색상 설정 (배경에 따라)
+      const nicknameColor = bgKey === "bg1" ? "#fff" : "#52c4ff";
+      ctx.fillStyle = nicknameColor;
 
-      const dataUrl = await toPng(root, {
-        width: PREVIEW_BOARD_W,
-        height: PREVIEW_BOARD_H,
-        pixelRatio: 2, // 해상도 향상
-        cacheBust: true,
-        skipAutoScale: true,
-        backgroundColor: "#ffffff",
-        // CORS 및 fetch 옵션
-        fetchRequestInit: {
-          mode: "cors",
-          credentials: "omit",
+      // 텍스트 그림자 설정 (bg1일 때만)
+      if (bgKey === "bg1") {
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 1;
+      }
+
+      // 4. 닉네임 그리기
+      const nicknameX = canvas.width - 20; // 우측에서 20px 떨어진 곳
+      const nicknameY = 175; // 상단에서 175px
+
+      // 긴 닉네임 처리 (줄바꿈)
+      const maxWidth = 150; // 닉네임 영역 최대 폭
+      const lineHeight = 26; // 줄 높이 (22px * 1.2)
+
+      if (nickname) {
+        drawMultilineText(
+          ctx,
+          nickname,
+          nicknameX,
+          nicknameY,
+          maxWidth,
+          lineHeight
+        );
+      }
+
+      // 그림자 리셋
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // 5. 이미지 셀들 그리기
+      const PATTERN = [4, 4, 2];
+      const prefix = [0, 4, 8, 10];
+
+      // 각 셀의 위치 계산 및 이미지 그리기
+      const promises: Promise<void>[] = [];
+
+      for (let k = 0; k < Math.min(10, images.length); k++) {
+        const imageValue = images[k];
+
+        // 셀 위치 계산
+        const { wr, wc } = idxToWrap(k, PATTERN, prefix);
+        const cellX = LEFT_SIDE + wc * (CELL + GAP);
+        const cellY = TOP + wr * (CELL + GAP + 20);
+
+        // 이미지 로드 및 그리기 작업을 Promise로 처리
+        promises.push(drawImageCell(ctx, imageValue, cellX, cellY, CELL));
+      }
+
+      // 모든 이미지 그리기 완료까지 대기
+      await Promise.all(promises);
+
+      // 6. Canvas를 Blob으로 변환하여 다운로드
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const timestamp = new Date()
+            .toISOString()
+            .slice(0, 19)
+            .replace(/[:T]/g, "-");
+          a.href = url;
+          a.download = `collage-${timestamp}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
         },
-        filter: () => {
-          // 불필요한 요소 필터링
-          return true;
-        },
-        style: {
-          transform: "none",
-          transformOrigin: "top left",
-        },
-      });
-
-      const a = document.createElement("a");
-      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-      a.href = dataUrl;
-      a.download = `collage-${ts}.png`;
-      a.click();
-    } catch (err) {
-      console.error("저장 실패:", err);
-      alert("이미지 저장에 실패했어요.");
+        "image/png",
+        0.95
+      );
+    } catch (error) {
+      console.error("Canvas 저장 실패:", error);
+      alert("이미지 저장에 실패했습니다.");
     }
-  }, [selectedBgUrl]);
+  }, [selectedBgUrl, bgKey, nickname, images]);
 
   // === 선택창 분배: 3,3,3,1 (총 10칸) ===
   const row1 = [0, 1, 2];
@@ -395,6 +569,8 @@ export default function SoloEditor() {
     </div>
   );
 
+  const boardContentRef = useRef<HTMLDivElement>(null);
+
   return (
     <div style={{ padding: 16 }}>
       <div
@@ -424,7 +600,6 @@ export default function SoloEditor() {
             color: "#000",
           }}
         >
-          {/* 간단한 화살표 아이콘 */}
           <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
         </button>
         <h2
@@ -561,7 +736,7 @@ export default function SoloEditor() {
           }}
         >
           <div
-            ref={boardContentRef} // ⬅ 저장 대상
+            ref={boardContentRef}
             style={{
               transform: `scale(${previewScale})`,
               transformOrigin: "top left",
@@ -575,17 +750,15 @@ export default function SoloEditor() {
           >
             <CollageBoardSingle
               participants={[participant]}
-              titles={titles} // 10개
+              titles={titles}
               cell={CELL}
               gap={GAP}
-              // ✅ 좌우 서로 다르게 적용
               margins={{
                 top: TOP,
                 bottom: BOTTOM,
                 left: LEFT_SIDE,
                 right: RIGHT_SIDE,
               }}
-              // 배경에 따른 닉네임 색
               bgKey={bgKey}
             />
           </div>
