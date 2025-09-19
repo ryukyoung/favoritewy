@@ -12,7 +12,6 @@ import CollageBoard from "../components/CollageBoard";
 import type { Participant } from "../types";
 import SmartImageCell from "../components/SmartImageCell";
 import { COLUMN_CONFIGS } from "../columnConfig";
-import { toPng } from "html-to-image";
 
 import { db, storage } from "../lib/firebase";
 import {
@@ -28,6 +27,8 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 const IMG_COLS = COLUMN_CONFIGS.length;
 const GRID_ROWS = 4;
 const GRID_COLS = Math.ceil(IMG_COLS / GRID_ROWS);
+
+// 배경 파일 - public 폴더로 이동 권장
 const BG1 = "../assets/bg-5.png";
 const BG2 = "../assets/bg-10.png";
 
@@ -44,6 +45,138 @@ const BOTTOM = 110;
 
 const GRID_W = IMG_COLS * CELL + (IMG_COLS - 1) * GAP;
 const BOARD_W = LEFT_SIDE + RIGHT_SIDE + GRID_W;
+
+// === Canvas 관련 유틸리티 함수들 ===
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`이미지 로드 실패: ${src}`));
+    img.src = src;
+  });
+}
+
+function drawMultilineText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number
+) {
+  const words = text.split("");
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const char of words) {
+    const testLine = currentLine + char;
+    const metrics = ctx.measureText(testLine);
+
+    if (metrics.width > maxWidth && currentLine !== "") {
+      lines.push(currentLine);
+      currentLine = char;
+    } else {
+      currentLine = testLine;
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  const maxLines = 3;
+  const displayLines = lines.slice(0, maxLines);
+
+  const totalHeight = displayLines.length * lineHeight;
+  let startY = y - totalHeight / 2 + lineHeight / 2;
+
+  displayLines.forEach((line, index) => {
+    const currentY = startY + index * lineHeight;
+    ctx.fillText(line, x, currentY);
+  });
+}
+
+async function drawImageCell(
+  ctx: CanvasRenderingContext2D,
+  imageValue: File | string | null,
+  x: number,
+  y: number,
+  size: number
+): Promise<void> {
+  // 셀 배경 그리기
+  ctx.fillStyle = "#fafafa";
+  ctx.fillRect(x, y, size, size);
+
+  if (!imageValue) {
+    ctx.fillStyle = "#aaa";
+    ctx.font = "12px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("No Image", x + size / 2, y + size / 2);
+    return;
+  }
+
+  try {
+    let imageSrc: string;
+
+    if (imageValue instanceof File) {
+      imageSrc = URL.createObjectURL(imageValue);
+    } else {
+      imageSrc = imageValue;
+    }
+
+    const img = await loadImage(imageSrc);
+
+    // object-fit: cover 효과
+    const imgAspect = img.width / img.height;
+    const cellAspect = 1;
+
+    let drawWidth, drawHeight, drawX, drawY;
+
+    if (imgAspect > cellAspect) {
+      drawHeight = size;
+      drawWidth = size * imgAspect;
+      drawX = x - (drawWidth - size) / 2;
+      drawY = y;
+    } else {
+      drawWidth = size;
+      drawHeight = size / imgAspect;
+      drawX = x;
+      drawY = y - (drawHeight - size) / 2;
+    }
+
+    // YouTube 썸네일 스케일 처리
+    if (imageSrc.includes("ytimg.com")) {
+      const scale = 1.4;
+      const scaledW = drawWidth * scale;
+      const scaledH = drawHeight * scale;
+      drawX = x - (scaledW - size) / 2;
+      drawY = y - (scaledH - size) / 2;
+      drawWidth = scaledW;
+      drawHeight = scaledH;
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, size, size);
+    ctx.clip();
+
+    ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+    ctx.restore();
+
+    if (imageValue instanceof File) {
+      URL.revokeObjectURL(imageSrc);
+    }
+  } catch (error) {
+    console.error("이미지 셀 그리기 실패:", error);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "12px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Load Failed", x + size / 2, y + size / 2);
+  }
+}
 
 export async function uploadImageAndGetUrl(file: File, path: string) {
   const storageRef = ref(storage, path);
@@ -67,11 +200,11 @@ export default function MultiEditor() {
 
   const [countField, setCountField] = useState(String(count));
 
-  // 배경 선택(원하면 Firestore에 저장/복원도 가능)
+  // 배경 선택
   const [bgKey, setBgKey] = useState<"bg1" | "bg2">("bg1");
   const selectedBgUrl = bgKey === "bg1" ? BG1 : BG2;
 
-  // 방 레퍼런스 (roomId 있을 때만)
+  // 방 레퍼런스
   const roomRef = useMemo(
     () => (roomId ? doc(db, "rooms", roomId) : null),
     [roomId]
@@ -81,7 +214,7 @@ export default function MultiEditor() {
   useEffect(() => {
     if (roomId) return;
     (async () => {
-      const newRef = doc(collection(db, "rooms")); // 자동 ID
+      const newRef = doc(collection(db, "rooms"));
       const initial: {
         titles: string[];
         participants: Participant[];
@@ -109,7 +242,7 @@ export default function MultiEditor() {
     images: Array(IMG_COLS).fill(null),
   });
 
-  // ✅ 서버 상태 실시간 구독(새로고침/재입장 시 복원)
+  // 서버 상태 실시간 구독
   useEffect(() => {
     if (!roomRef) return;
 
@@ -117,7 +250,6 @@ export default function MultiEditor() {
 
     const unsub = onSnapshot(roomRef, async (snap) => {
       if (!snap.exists()) {
-        // 문서가 없으면 생성
         const base: Participant[] = [
           makeEmptyParticipant(),
           makeEmptyParticipant(),
@@ -134,20 +266,17 @@ export default function MultiEditor() {
 
       const data = snap.data() as any;
 
-      // participants 최소 2명 보정
       let p: Participant[] = Array.isArray(data?.participants)
         ? [...data.participants]
         : [];
       if (p.length < 2) {
         for (let i = p.length; i < 2; i++) p.push(makeEmptyParticipant());
-        // 서버에도 반영
         void updateDoc(roomRef, {
           participants: p,
           updatedAt: serverTimestamp(),
         }).catch(console.error);
       }
 
-      // count 2~10 클램프
       const c = clamp(
         typeof data?.count === "number" ? data.count : p.length || 2,
         2,
@@ -160,7 +289,6 @@ export default function MultiEditor() {
         }).catch(console.error);
       }
 
-      // 로컬 상태 동기화
       setParticipants(p);
       setCount(c);
       if (initializing) {
@@ -184,7 +312,6 @@ export default function MultiEditor() {
       } else if (next.length > c) {
         next.length = c;
       }
-      // 서버 반영
       if (roomRef) {
         updateDoc(roomRef, {
           participants: next,
@@ -199,7 +326,7 @@ export default function MultiEditor() {
     });
   };
 
-  // 입력 확정 처리(클램프 포함)
+  // 입력 확정 처리
   const commitCountFromField = () => {
     const n = parseInt(countField, 10);
     if (Number.isNaN(n)) {
@@ -227,13 +354,12 @@ export default function MultiEditor() {
     });
   };
 
-  // 이미지/프리셋/유튜브 썸네일 업데이트(+Storage 업로드)
+  // 이미지 업데이트
   const updateImage = (
     idx: number,
     imgIdx: number,
     v: File | string | null
   ) => {
-    // 공통 저장 함수
     const persist = (imagesArray: (File | string | null)[]) => {
       if (roomRef) {
         updateDoc(roomRef, {
@@ -250,28 +376,23 @@ export default function MultiEditor() {
       }
     };
 
-    // 낙관적 로컬 업데이트
     setParticipants((prev) => {
       const next = [...prev];
       const imgs = [...(next[idx].images || [])];
 
       if (v instanceof File) {
-        // 1) 즉시 미리보기(blob URL)
         const tempUrl = URL.createObjectURL(v);
         imgs[imgIdx] = tempUrl;
         next[idx] = { ...next[idx], images: imgs };
-        // 2) 비동기 업로드 → 다운로드 URL 저장
         if (roomId) {
           const key = `${roomId}/${idx}-${imgIdx}-${Date.now()}-${v.name}`;
           uploadImageAndGetUrl(v, key)
             .then((url) => {
-              // 로컬 교체
               setParticipants((curr) => {
                 const n2 = [...curr];
                 const i2 = [...(n2[idx].images || [])];
                 i2[imgIdx] = url;
                 n2[idx] = { ...n2[idx], images: i2 };
-                // 서버 저장
                 if (roomRef) {
                   updateDoc(roomRef, {
                     participants: n2,
@@ -290,10 +411,8 @@ export default function MultiEditor() {
             });
         }
       } else {
-        // 문자열(URL) 또는 null
         imgs[imgIdx] = (v as string | null) ?? null;
         next[idx] = { ...next[idx], images: imgs };
-        // 서버 저장
         persist(imgs);
       }
 
@@ -301,7 +420,7 @@ export default function MultiEditor() {
     });
   };
 
-  // 이미지 로드 에러 로그(선택)
+  // 이미지 로드 에러 로그
   useEffect(() => {
     const onImgError = (e: Event) => {
       const t = e.target as HTMLImageElement;
@@ -336,34 +455,95 @@ export default function MultiEditor() {
     return () => window.removeEventListener("resize", handleResize);
   }, [boardHeight]);
 
-  // PNG 저장
-  const boardContentRef = useRef<HTMLDivElement>(null);
+  // Canvas PNG 저장 함수
   const handleSave = useCallback(async () => {
-    if (!boardContentRef.current) return;
-    if ((document as any).fonts?.ready) {
-      try {
-        await (document as any).fonts.ready;
-      } catch {}
-    }
-    try {
-      const dataUrl = await toPng(boardContentRef.current, {
-        width: BOARD_W,
-        pixelRatio: 1,
-        cacheBust: true,
-        style: { transform: "none", transformOrigin: "top left" },
-      });
-      const a = document.createElement("a");
-      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-      a.href = dataUrl;
-      a.download = `collage-${ts}.png`;
-      a.click();
-    } catch (err) {
-      console.error(err);
-      alert("이미지 저장에 실패했어요. (콘솔 확인)");
-    }
-  }, []);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-  // 방 준비 전엔 간단 표시 (자동 생성 직후 등)
+    canvas.width = BOARD_W;
+    canvas.height = boardHeight;
+
+    try {
+      // 1. 배경 이미지 그리기
+      const bgImg = await loadImage(selectedBgUrl);
+      ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+
+      // 2. 각 참가자별로 그리기
+      const promises: Promise<void>[] = [];
+
+      participants.forEach((participant, rowIndex) => {
+        if (rowIndex >= count) return; // 현재 설정된 인원수만
+
+        // 참가자 행 Y 좌표
+        const rowY = TOP + rowIndex * (CELL + GAP);
+
+        // 닉네임 그리기
+        if (participant.nickname) {
+          ctx.font = "500 23px Arial, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          // 배경에 따른 닉네임 색상
+          const nicknameColor = bgKey === "bg1" ? "#fff" : "#000";
+          ctx.fillStyle = nicknameColor;
+
+          // 닉네임 위치 (왼쪽 마진 영역 중앙)
+          const nicknameX = LEFT_SIDE / 2;
+          const nicknameY = rowY + CELL / 2;
+          const maxNicknameWidth = LEFT_SIDE - 20;
+          const lineHeight = 27;
+
+          drawMultilineText(
+            ctx,
+            participant.nickname,
+            nicknameX,
+            nicknameY,
+            maxNicknameWidth,
+            lineHeight
+          );
+        }
+
+        // 이미지 셀들 그리기
+        for (let colIndex = 0; colIndex < IMG_COLS; colIndex++) {
+          const imageValue = participant.images?.[colIndex];
+          const cellX = LEFT_SIDE + colIndex * (CELL + GAP);
+          const cellY = rowY;
+
+          promises.push(drawImageCell(ctx, imageValue, cellX, cellY, CELL));
+        }
+      });
+
+      // 모든 이미지 그리기 완료 대기
+      await Promise.all(promises);
+
+      // 3. Canvas를 Blob으로 변환하여 다운로드
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const timestamp = new Date()
+            .toISOString()
+            .slice(0, 19)
+            .replace(/[:T]/g, "-");
+          a.href = url;
+          a.download = `collage-${timestamp}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+        "image/png",
+        0.95
+      );
+    } catch (error) {
+      console.error("Canvas 저장 실패:", error);
+      alert("이미지 저장에 실패했습니다.");
+    }
+  }, [selectedBgUrl, bgKey, participants, count, boardHeight]);
+
+  const boardContentRef = useRef<HTMLDivElement>(null);
+
+  // 방 준비 전엔 간단 표시
   if (!roomId) {
     return <div style={{ padding: 16 }}>방을 만드는 중…</div>;
   }
@@ -704,6 +884,7 @@ export default function MultiEditor() {
             background: "#ff7ed0",
             fontWeight: 500,
             cursor: "pointer",
+            border: "1px solid #ddd",
           }}
         >
           취향표 저장
