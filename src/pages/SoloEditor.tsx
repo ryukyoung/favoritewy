@@ -54,6 +54,8 @@ function idbOpen(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error);
   });
 }
+await new Promise((r) => requestAnimationFrame(() => r(null)));
+
 async function idbSet(key: string, blob: Blob | null): Promise<void> {
   const db = await idbOpen();
   return new Promise((resolve, reject) => {
@@ -297,41 +299,46 @@ export default function SoloEditor() {
     const root = boardContentRef.current;
     if (!root) return;
 
-    // 1) 폰트
-    if ((document as any).fonts?.ready) {
-      try {
-        await (document as any).fonts.ready;
-      } catch {}
-    }
-
-    // 2) 배경 선로딩 (정적 import라면 CORS 불필요)
     try {
+      // 배경 이미지를 먼저 로드
       await preloadImage(selectedBgUrl);
-    } catch {}
 
-    // 3) 콘텐츠 내부 IMG 모두 decode 대기
-    await waitForImages(root);
+      // 모든 이미지 로드 대기
+      await waitForImages(root);
 
-    try {
+      // 추가 대기 시간
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       const dataUrl = await toPng(root, {
         width: PREVIEW_BOARD_W,
-        pixelRatio: 1,
+        height: PREVIEW_BOARD_H,
+        pixelRatio: 2, // 해상도 향상
         cacheBust: true,
-        // fetch 옵션 + useCORS 힌트
-        fetchRequestInit: { mode: "cors", credentials: "omit" } as any,
-        // html-to-image 버전에 따라 useCORS가 있다면 true로
-        // @ts-ignore
-        useCORS: true,
-        style: { transform: "none", transformOrigin: "top left" },
+        skipAutoScale: true,
+        backgroundColor: "#ffffff",
+        // CORS 및 fetch 옵션
+        fetchRequestInit: {
+          mode: "cors",
+          credentials: "omit",
+        },
+        filter: (node) => {
+          // 불필요한 요소 필터링
+          return true;
+        },
+        style: {
+          transform: "none",
+          transformOrigin: "top left",
+        },
       });
+
       const a = document.createElement("a");
       const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
       a.href = dataUrl;
       a.download = `collage-${ts}.png`;
       a.click();
     } catch (err) {
-      console.error(err);
-      alert("이미지 저장에 실패했어요. (콘솔 확인)");
+      console.error("저장 실패:", err);
+      alert("이미지 저장에 실패했어요.");
     }
   }, [selectedBgUrl]);
 
