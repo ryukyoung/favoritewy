@@ -9,7 +9,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBFaQ8-NsD6gKs-sKvFf6hckgByIN3jfII",
   authDomain: "wyfavorite-f73e6.firebaseapp.com",
   projectId: "wyfavorite-f73e6",
-  storageBucket: "wyfavorite-f73e6.appspot.com",
+  storageBucket: "wyfavorite-f73e6.firebasestorage.app",
   messagingSenderId: "405918819454",
   appId: "1:405918819454:web:afc0dde91950cb1831e42f",
   measurementId: "G-GV41STR0Y6",

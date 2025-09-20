@@ -99,6 +99,7 @@ function drawMultilineText(
 }
 
 export async function uploadImageAndGetUrl(file: File, path: string) {
+  await ensureSignedIn();
   const storageRef = ref(storage, path);
 
   // 클라이언트 압축 (대략 1MB / 긴 변 1200px)
@@ -340,6 +341,7 @@ export default function MultiEditor() {
                   const i2 = [...(n2[idx].images || [])];
                   i2[imgIdx] = url;
                   n2[idx] = { ...n2[idx], images: i2 };
+                  console.log("saved url:", url);
 
                   updateFirestore(
                     roomRef,

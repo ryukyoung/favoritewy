@@ -34,7 +34,7 @@ export default function Manual() {
           <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
         </button>
 
-        <h2 style={{ margin: 0, gridColumn: 2 }}>이용 방법</h2>
+        <h2 style={{ margin: 0, gridColumn: 2 }}>사용 방법</h2>
       </div>
 
       <div style={{ marginBottom: 24 }}>
@@ -46,7 +46,7 @@ export default function Manual() {
 
       <div style={{ display: "grid", gap: 24 }}>
         <section>
-          <h3 style={{ marginBottom: 12 }}>1인 에디터</h3>
+          <h3 style={{ marginBottom: 12 }}>👤 1인 에디터</h3>
           <p>1인 에디터에서는 혼자 취향표를 제작할 수 있습니다.</p>
           <p>1. 닉네임을 입력합니다.</p>
           <p>2. 항목별로 필요한 사진을 업로드하거나, 선택합니다.</p>
@@ -59,7 +59,7 @@ export default function Manual() {
         </section>
 
         <section>
-          <h3 style={{ marginBottom: 12 }}>멀티 에디터</h3>
+          <h3 style={{ marginBottom: 12 }}>👥 멀티 에디터</h3>
           <p>멀티 에디터는 여러 사람들이 함께 취향표를 제작할 수 있습니다.</p>
           <p>1. 홈 화면에서 [다인] 버튼을 클릭하면 방이 생성됩니다.</p>
           <p>
