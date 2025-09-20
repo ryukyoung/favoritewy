@@ -1,8 +1,9 @@
+// src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAnalytics, isSupported } from "firebase/analytics";
-import { getAuth, signInAnonymously } from "firebase/auth";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBFaQ8-NsD6gKs-sKvFf6hckgByIN3jfII",
@@ -20,11 +21,28 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const auth = getAuth(app);
 
-// 브라우저일 때 익명 로그인 시도
-if (typeof window !== "undefined") {
-  signInAnonymously(auth).catch((e) => {
+// ❶ 로그인 보장 함수
+export async function ensureSignedIn() {
+  if (auth.currentUser) return auth.currentUser;
+  try {
+    await signInAnonymously(auth);
+  } catch (e) {
     console.error("Anonymous sign-in failed:", e);
+    throw e;
+  }
+  // onAuthStateChanged가 실제 사용자 설정될 때까지 한 번 기다림
+  await new Promise<void>((resolve) => {
+    const unsub = onAuthStateChanged(auth, () => {
+      unsub();
+      resolve();
+    });
   });
+  return auth.currentUser;
+}
+
+// ❷ 페이지 로드시 미리 시도(선택) — 실패해도 무시
+if (typeof window !== "undefined") {
+  ensureSignedIn().catch(() => {});
 }
 
 export const analyticsPromise = isSupported()

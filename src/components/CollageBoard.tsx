@@ -119,7 +119,7 @@ export default function CollageBoard({
                 width: cell,
                 height: cell,
                 boxSizing: "border-box",
-                border: "0px solid #ddd",
+                border: "1px solid #000",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -143,7 +143,7 @@ export default function CollageBoard({
                   }}
                 />
               ) : (
-                <span style={{ fontSize: 12, color: "#aaa" }}>♥</span>
+                <span style={{ fontSize: 12, color: "#aaa" }}></span>
               )}
             </div>
           );

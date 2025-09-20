@@ -12,12 +12,10 @@ import type { Participant } from "../types";
 import { COLUMN_CONFIGS } from "../columnConfig";
 import CollageBoardSingle from "../components/CollageBoardSingle";
 import { useNavigate } from "react-router-dom";
-
-// ✅ 브라우저 이미지 압축
 import imageCompression from "browser-image-compression";
 
-// === Solo 전용: 총 10칸 ===
-const SOLO_COLS = 10; // 10개 고정
+// Solo 전용: 총 10칸
+const SOLO_COLS = 10;
 const CELL = 160;
 const GAP = 40;
 const LEFT_SIDE = 60;
@@ -25,7 +23,7 @@ const RIGHT_SIDE = 60;
 const TOP = 255;
 const BOTTOM = 100;
 
-// ★ 미리보기는 4/4/2로 보일 것이므로, '최대 4열' 기준으로 보드 크기 계산
+// 미리보기는 4/4/2로 보일 것이므로, '최대 4열' 기준으로 보드 크기 계산
 const PREVIEW_MAX_COLS = 4;
 const PREVIEW_BOARD_W =
   LEFT_SIDE +
@@ -35,11 +33,14 @@ const PREVIEW_ROWS = 3; // 4/4/2 → 3행
 const PREVIEW_BOARD_H =
   TOP + BOTTOM + PREVIEW_ROWS * CELL + (PREVIEW_ROWS - 1) * GAP;
 
-// ✅ 배경 파일(두 장) - public 폴더로 이동 권장
+// 배경 파일 - public 폴더로 이동 권장
 const BG1 = "../assets/bg-9.png";
 const BG2 = "../assets/bg-8.png";
 
-// === 유틸리티 함수들을 컴포넌트 외부로 이동 ===
+const PATTERN = [4, 4, 2];
+const PREFIX = [0, 4, 8, 10];
+
+// === 유틸리티 함수들 ===
 
 // 이미지 로드 Promise 래퍼
 function loadImage(src: string): Promise<HTMLImageElement> {
@@ -53,15 +54,15 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 // 인덱스를 행/열로 변환
-function idxToWrap(k: number, pattern: number[], prefix: number[]) {
+function idxToWrap(k: number) {
   let r = 0;
-  for (let i = 0; i < pattern.length; i++) {
-    if (k >= prefix[i] && k < prefix[i + 1]) {
+  for (let i = 0; i < PATTERN.length; i++) {
+    if (k >= PREFIX[i] && k < PREFIX[i + 1]) {
       r = i;
       break;
     }
   }
-  const c = k - prefix[r];
+  const c = k - PREFIX[r];
   return { wr: r, wc: c };
 }
 
@@ -74,11 +75,10 @@ function drawMultilineText(
   maxWidth: number,
   lineHeight: number
 ) {
-  const words = text.split(""); // 한글은 글자 단위로 분할
+  const words = text.split("");
   const lines: string[] = [];
   let currentLine = "";
 
-  // 단어별로 줄 나누기
   for (const char of words) {
     const testLine = currentLine + char;
     const metrics = ctx.measureText(testLine);
@@ -95,15 +95,11 @@ function drawMultilineText(
     lines.push(currentLine);
   }
 
-  // 최대 6줄까지만 표시
   const maxLines = 6;
   const displayLines = lines.slice(0, maxLines);
-
-  // 여러 줄 중앙 정렬을 위한 시작 Y 계산
   const totalHeight = displayLines.length * lineHeight;
   let startY = y - totalHeight / 2 + lineHeight / 2;
 
-  // 각 줄 그리기
   displayLines.forEach((line, index) => {
     const currentY = startY + index * lineHeight;
     ctx.fillText(line, x, currentY);
@@ -118,7 +114,7 @@ async function drawImageCell(
   y: number,
   size: number
 ): Promise<void> {
-  // 1. 셀 배경 그리기 (회색 배경 + 검은 테두리)
+  // 셀 배경 그리기
   ctx.fillStyle = "#fafafa";
   ctx.fillRect(x, y, size, size);
 
@@ -127,7 +123,6 @@ async function drawImageCell(
   ctx.strokeRect(x, y, size, size);
 
   if (!imageValue) {
-    // 이미지가 없을 때 "No Image" 텍스트
     ctx.fillStyle = "#aaa";
     ctx.font = "12px Arial, sans-serif";
     ctx.textAlign = "center";
@@ -137,55 +132,42 @@ async function drawImageCell(
   }
 
   try {
-    let imageSrc: string;
+    const imageSrc =
+      imageValue instanceof File ? URL.createObjectURL(imageValue) : imageValue;
 
-    // File 객체 처리
-    if (imageValue instanceof File) {
-      // File을 blob URL로 변환
-      imageSrc = URL.createObjectURL(imageValue);
-    } else {
-      imageSrc = imageValue;
-    }
-
-    // 이미지 로드 및 그리기
     const img = await loadImage(imageSrc);
 
-    // 이미지를 셀 크기에 맞춰 그리기 (object-fit: cover 효과)
+    // object-fit: cover 효과
     const imgAspect = img.width / img.height;
-    const cellAspect = 1; // 정사각형
-
     let drawWidth, drawHeight, drawX, drawY;
 
-    if (imgAspect > cellAspect) {
-      // 이미지가 더 넓음 - 높이를 맞추고 좌우 크롭
+    if (imgAspect > 1) {
       drawHeight = size;
       drawWidth = size * imgAspect;
       drawX = x - (drawWidth - size) / 2;
       drawY = y;
     } else {
-      // 이미지가 더 높음 - 폭을 맞추고 상하 크롭
       drawWidth = size;
       drawHeight = size / imgAspect;
       drawX = x;
       drawY = y - (drawHeight - size) / 2;
     }
 
-    // 클리핑 영역 설정하여 셀 경계 밖으로 나가지 않도록
+    // 클리핑 영역 설정
     ctx.save();
     ctx.beginPath();
-    ctx.rect(x + 1, y + 1, size - 2, size - 2); // 테두리 1px 고려
+    ctx.rect(x + 1, y + 1, size - 2, size - 2);
     ctx.clip();
 
     ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
     ctx.restore();
 
-    // File 객체였다면 생성한 URL 정리
+    // File 객체 URL 정리
     if (imageValue instanceof File) {
       URL.revokeObjectURL(imageSrc);
     }
   } catch (error) {
     console.error("이미지 셀 그리기 실패:", error);
-    // 실패 시 "No Image" 표시
     ctx.fillStyle = "#aaa";
     ctx.font = "12px Arial, sans-serif";
     ctx.textAlign = "center";
@@ -194,7 +176,7 @@ async function drawImageCell(
   }
 }
 
-// ===== IndexedDB 아주 얇은 유틸 =====
+// === IndexedDB 유틸리티 ===
 const DB_NAME = "solo-editor-v1";
 const STORE = "images";
 
@@ -203,7 +185,9 @@ function idbOpen(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE);
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -215,8 +199,11 @@ async function idbSet(key: string, blob: Blob | null): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const os = tx.objectStore(STORE);
-    if (blob === null) os.delete(key);
-    else os.put(blob, key);
+    if (blob === null) {
+      os.delete(key);
+    } else {
+      os.put(blob, key);
+    }
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -233,7 +220,7 @@ async function idbGet(key: string): Promise<Blob | null> {
   });
 }
 
-// ✅ 파일 압축 유틸 (대략 1MB 이하, 긴 변 1200px)
+// 파일 압축 유틸
 async function compressIfNeeded(file: File): Promise<Blob> {
   const opts = {
     maxSizeMB: 1,
@@ -249,16 +236,42 @@ async function compressIfNeeded(file: File): Promise<Blob> {
   }
 }
 
+// 로컬스토리지 키 헬퍼
+const getStorageKey = (
+  type: "nickname" | "bgKey" | "imgUrl",
+  index?: number
+) => {
+  if (type === "imgUrl" && typeof index === "number") {
+    return `solo:imgUrl:${index}`;
+  }
+  return `solo:${type}`;
+};
+
 export default function SoloEditor() {
   const nav = useNavigate();
 
-  // 배경 선택 상태 (localStorage 초기값 반영)
+  // 상태 초기화
   const [bgKey, setBgKey] = useState<"bg1" | "bg2">(
-    (localStorage.getItem("solo:bgKey") as "bg1" | "bg2") || "bg1"
+    (localStorage.getItem(getStorageKey("bgKey")) as "bg1" | "bg2") || "bg1"
   );
+
+  const [nickname, setNickname] = useState(
+    localStorage.getItem(getStorageKey("nickname")) || ""
+  );
+
+  const [images, setImages] = useState<(File | string | null)[]>(
+    Array(SOLO_COLS).fill(null)
+  );
+
+  const [previewScale, setPreviewScale] = useState(1);
+
+  // refs
+  const blobUrlMapRef = useRef<Map<number, string>>(new Map());
+  const previewWrapRef = useRef<HTMLDivElement>(null);
+
+  // 계산된 값들
   const selectedBgUrl = bgKey === "bg1" ? BG1 : BG2;
 
-  // 1) SOLO용 칸 설정: COLUMN_CONFIGS에서 10개로 맞추고, 모자라면 업로드로 채움
   const SOLO_CONFIGS = useMemo(() => {
     const out = [...COLUMN_CONFIGS].slice(0, SOLO_COLS);
     while (out.length < SOLO_COLS) {
@@ -267,70 +280,61 @@ export default function SoloEditor() {
     return out;
   }, []);
 
-  // 2) 타이틀 자동 추출(10개)
   const titles = useMemo(
     () => SOLO_CONFIGS.map((c) => c.title),
     [SOLO_CONFIGS]
   );
-
-  // 3) 단일 참가자 상태 (닉네임은 localStorage 초기값)
-  const [nickname, setNickname] = useState(
-    localStorage.getItem("solo:nickname") || ""
-  );
-
-  // 이미지: 문자열(URL/dataURL/blobURL) | null
-  const [images, setImages] = useState<(File | string | null)[]>(
-    Array(SOLO_COLS).fill(null)
-  );
-
-  // blob: URL 누수 방지를 위한 맵
-  const blobUrlMapRef = useRef<Map<number, string>>(new Map());
 
   const participant: Participant = useMemo(
     () => ({ nickname, images }),
     [nickname, images]
   );
 
-  // ======== 초기 로드: localStorage/IndexedDB 에서 복구 ========
+  // 초기 로드: localStorage/IndexedDB에서 복구
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+
+    const loadInitialData = async () => {
       const next: (string | null)[] = Array(SOLO_COLS).fill(null);
 
-      // 1) localStorage에 URL이 있으면 우선 사용
+      // localStorage에서 URL 복구
       for (let i = 0; i < SOLO_COLS; i++) {
-        const url = localStorage.getItem(`solo:imgUrl:${i}`);
+        const url = localStorage.getItem(getStorageKey("imgUrl", i));
         if (url) next[i] = url;
       }
 
-      // 2) 나머지는 IndexedDB에서 Blob 불러와 blob:URL 생성
-      const tasks: Promise<void>[] = [];
+      // IndexedDB에서 Blob 복구
+      const tasks = [];
       for (let i = 0; i < SOLO_COLS; i++) {
-        if (next[i] != null) continue; // 이미 채움
+        if (next[i] != null) continue;
+
         tasks.push(
-          (async (idx: number) => {
-            try {
-              const blob = await idbGet(`img:${idx}`);
-              if (blob) {
+          idbGet(`img:${i}`)
+            .then((blob) => {
+              if (blob && !cancelled) {
                 const u = URL.createObjectURL(blob);
-                blobUrlMapRef.current.set(idx, u);
-                next[idx] = u;
+                blobUrlMapRef.current.set(i, u);
+                next[i] = u;
               }
-            } catch {
-              /* ignore */
-            }
-          })(i)
+            })
+            .catch(() => {
+              // 에러 무시
+            })
         );
       }
+
       await Promise.all(tasks);
+
       if (!cancelled) {
         setImages(next);
       }
-    })();
+    };
+
+    loadInitialData();
 
     return () => {
       cancelled = true;
-      // 마운트 중 생성했던 blob:URL 정리
+      // blob URL 정리
       for (const u of blobUrlMapRef.current.values()) {
         URL.revokeObjectURL(u);
       }
@@ -338,102 +342,102 @@ export default function SoloEditor() {
     };
   }, []);
 
-  // 닉네임/bgKey 변경 시 즉시 저장
+  // localStorage 자동 저장
   useEffect(() => {
-    localStorage.setItem("solo:nickname", nickname);
+    localStorage.setItem(getStorageKey("nickname"), nickname);
   }, [nickname]);
+
   useEffect(() => {
-    localStorage.setItem("solo:bgKey", bgKey);
+    localStorage.setItem(getStorageKey("bgKey"), bgKey);
   }, [bgKey]);
 
-  // 이미지 변경 핸들러 + (압축 후) 영구 저장
-  const onChangeImage = (idx: number, v: File | string | null) => {
-    setImages((prev) => {
-      const next = [...prev];
-
-      // 이전 blob:URL 있으면 정리
-      const prevVal = next[idx];
+  // 이미지 변경 핸들러
+  const onChangeImage = useCallback(
+    async (idx: number, v: File | string | null) => {
+      // 이전 blob URL 정리
       const prevBlobUrl = blobUrlMapRef.current.get(idx);
-      if (
-        typeof prevVal === "string" &&
-        prevBlobUrl &&
-        prevVal === prevBlobUrl
-      ) {
+      if (prevBlobUrl) {
         URL.revokeObjectURL(prevBlobUrl);
         blobUrlMapRef.current.delete(idx);
       }
 
       if (v instanceof File) {
-        (async () => {
-          // 🔽 압축
+        try {
           const blob = await compressIfNeeded(v);
-          // 1) IndexedDB에 Blob 저장
           await idbSet(`img:${idx}`, blob);
-          // 2) localStorage의 URL 키 제거
-          localStorage.removeItem(`solo:imgUrl:${idx}`);
-          // 3) 미리보기 위해 blob:URL 생성
+          localStorage.removeItem(getStorageKey("imgUrl", idx));
+
           const u = URL.createObjectURL(blob);
           blobUrlMapRef.current.set(idx, u);
-          setImages((p) => {
-            const nn = [...p];
-            nn[idx] = u;
-            return nn;
-          });
-        })();
-      } else if (typeof v === "string") {
-        // 외부 URL or dataURL → localStorage에 저장
-        localStorage.setItem(`solo:imgUrl:${idx}`, v);
-        // IndexedDB의 Blob은 제거
-        void idbSet(`img:${idx}`, null);
-        next[idx] = v;
-      } else {
-        // null → 모두 제거
-        localStorage.removeItem(`solo:imgUrl:${idx}`);
-        void idbSet(`img:${idx}`, null);
-        next[idx] = null;
-      }
-      return next;
-    });
-  };
 
-  // 5) 미리보기 배율 (★ 4열 보드 폭 기반)
-  const previewWrapRef = useRef<HTMLDivElement>(null);
-  const [previewScale, setPreviewScale] = useState(1);
+          setImages((prev) => {
+            const next = [...prev];
+            next[idx] = u;
+            return next;
+          });
+        } catch (error) {
+          console.error("이미지 저장 실패:", error);
+          alert("이미지 저장에 실패했습니다.");
+        }
+      } else if (typeof v === "string") {
+        localStorage.setItem(getStorageKey("imgUrl", idx), v);
+        await idbSet(`img:${idx}`, null).catch(console.error);
+
+        setImages((prev) => {
+          const next = [...prev];
+          next[idx] = v;
+          return next;
+        });
+      } else {
+        localStorage.removeItem(getStorageKey("imgUrl", idx));
+        await idbSet(`img:${idx}`, null).catch(console.error);
+
+        setImages((prev) => {
+          const next = [...prev];
+          next[idx] = null;
+          return next;
+        });
+      }
+    },
+    []
+  );
+
+  // 미리보기 스케일 조정
   useLayoutEffect(() => {
     const handleResize = () => {
       const wrap = previewWrapRef.current;
       if (!wrap) return;
+
       const available = wrap.clientWidth - 8;
       const fit = available / PREVIEW_BOARD_W;
-      const s = Math.min(1, fit);
-      setPreviewScale(s);
+      setPreviewScale(Math.min(1, fit));
     };
+
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // ===== Canvas로 PNG 저장하는 함수 =====
+  // Canvas PNG 저장 함수
   const handleSave = useCallback(async () => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Canvas 크기 설정
     canvas.width = PREVIEW_BOARD_W;
     canvas.height = PREVIEW_BOARD_H;
 
     try {
-      // 1. 배경 이미지 로드 및 그리기
+      // 배경 이미지 로드 및 그리기
       const bgImg = await loadImage(selectedBgUrl);
       ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
 
-      // 2. 폰트 설정
+      // 폰트 설정
       ctx.font = "600 22px Arial, sans-serif";
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
 
-      // 3. 닉네임 색상 설정 (배경에 따라)
+      // 닉네임 색상 설정
       const nicknameColor = bgKey === "bg1" ? "#fff" : "#52c4ff";
       ctx.fillStyle = nicknameColor;
 
@@ -445,15 +449,13 @@ export default function SoloEditor() {
         ctx.shadowOffsetY = 1;
       }
 
-      // 4. 닉네임 그리기
-      const nicknameX = canvas.width - 20; // 우측에서 20px 떨어진 곳
-      const nicknameY = 175; // 상단에서 175px
-
-      // 긴 닉네임 처리 (줄바꿈)
-      const maxWidth = 150; // 닉네임 영역 최대 폭
-      const lineHeight = 26; // 줄 높이 (22px * 1.2)
-
+      // 닉네임 그리기
       if (nickname) {
+        const nicknameX = canvas.width - 20;
+        const nicknameY = 175;
+        const maxWidth = 150;
+        const lineHeight = 26;
+
         drawMultilineText(
           ctx,
           nickname,
@@ -470,29 +472,20 @@ export default function SoloEditor() {
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
 
-      // 5. 이미지 셀들 그리기
-      const PATTERN = [4, 4, 2];
-      const prefix = [0, 4, 8, 10];
-
-      // 각 셀의 위치 계산 및 이미지 그리기
-      const promises: Promise<void>[] = [];
-
+      // 이미지 셀들 그리기
+      const promises = [];
       for (let k = 0; k < Math.min(10, images.length); k++) {
         const imageValue = images[k];
-
-        // 셀 위치 계산
-        const { wr, wc } = idxToWrap(k, PATTERN, prefix);
+        const { wr, wc } = idxToWrap(k);
         const cellX = LEFT_SIDE + wc * (CELL + GAP);
         const cellY = TOP + wr * (CELL + GAP + 20);
 
-        // 이미지 로드 및 그리기 작업을 Promise로 처리
         promises.push(drawImageCell(ctx, imageValue, cellX, cellY, CELL));
       }
 
-      // 모든 이미지 그리기 완료까지 대기
       await Promise.all(promises);
 
-      // 6. Canvas를 Blob으로 변환하여 다운로드
+      // Canvas를 Blob으로 변환하여 다운로드
       canvas.toBlob(
         (blob) => {
           if (!blob) return;
@@ -516,61 +509,58 @@ export default function SoloEditor() {
     }
   }, [selectedBgUrl, bgKey, nickname, images]);
 
-  // === 선택창 분배: 3,3,3,1 (총 10칸) ===
-  const row1 = [0, 1, 2];
-  const row2 = [3, 4, 5];
-  const row3 = [6, 7, 8];
-  const row4 = [9];
-
-  const renderRow = (idxs: number[], cols: number) => (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-        gap: 10,
-      }}
-    >
-      {idxs.map((i) => {
-        const cfg = SOLO_CONFIGS[i];
-        return (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "stretch",
-              gap: 6,
-            }}
-          >
+  // 행 렌더링 헬퍼
+  const renderRow = useCallback(
+    (idxs: number[], cols: number) => (
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gap: 10,
+        }}
+      >
+        {idxs.map((i) => {
+          const cfg = SOLO_CONFIGS[i];
+          return (
             <div
+              key={i}
               style={{
-                fontSize: 16,
-                fontWeight: 500,
-                lineHeight: 1.2,
-                padding: "2px 2px",
-                whiteSpace: "pre-line",
-                overflow: "hidden",
-                color: "#000",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "stretch",
+                gap: 6,
               }}
-              title={cfg.title}
             >
-              {cfg.title}
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 500,
+                  lineHeight: 1.2,
+                  padding: "2px 2px",
+                  whiteSpace: "pre-line",
+                  overflow: "hidden",
+                  color: "#000",
+                }}
+                title={cfg.title}
+              >
+                {cfg.title}
+              </div>
+              <SmartImageCell
+                value={images[i]}
+                onChange={(v) => onChangeImage(i, v)}
+                config={cfg}
+              />
             </div>
-            <SmartImageCell
-              value={images[i]}
-              onChange={(v) => onChangeImage(i, v)}
-              config={cfg}
-            />
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    ),
+    [SOLO_CONFIGS, images, onChangeImage]
   );
-
-  const boardContentRef = useRef<HTMLDivElement>(null);
 
   return (
     <div style={{ padding: 16 }}>
+      {/* 헤더 */}
       <div
         style={{
           display: "grid",
@@ -584,7 +574,6 @@ export default function SoloEditor() {
           type="button"
           onClick={() => nav("/")}
           aria-label="뒤로가기"
-          title="뒤로가기"
           style={{
             width: 36,
             height: 36,
@@ -600,18 +589,19 @@ export default function SoloEditor() {
         >
           <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
         </button>
+
         <h2
           style={{
             fontSize: 20,
             color: "#000",
             justifySelf: "center",
+            margin: 0,
           }}
         >
           취향표 편집기
         </h2>
       </div>
 
-      {/* 위: 입력 / 아래: 미리보기 */}
       <section style={{ display: "grid", gap: 16 }}>
         {/* 닉네임 */}
         <div>
@@ -642,16 +632,16 @@ export default function SoloEditor() {
           />
         </div>
 
-        {/* 선택 그리드: 3 / 3 / 3 / 1(가득폭) */}
+        {/* 선택 그리드: 3/3/3/1 */}
         <div style={{ display: "grid", gap: 12 }}>
-          {renderRow(row1, 3)}
-          {renderRow(row2, 3)}
-          {renderRow(row3, 3)}
-          {renderRow(row4, 3)}
+          {renderRow([0, 1, 2], 3)}
+          {renderRow([3, 4, 5], 3)}
+          {renderRow([6, 7, 8], 3)}
+          {renderRow([9], 3)}
         </div>
       </section>
 
-      {/* ✅ 배경 선택 컨트롤 (미리보기 위) */}
+      {/* 배경 선택 */}
       <div
         style={{
           display: "flex",
@@ -672,57 +662,40 @@ export default function SoloEditor() {
           배경
         </span>
         <div style={{ display: "flex", gap: 6 }}>
-          <button
-            type="button"
-            onClick={() => setBgKey("bg1")}
-            aria-pressed={bgKey === "bg1"}
-            style={{
-              padding: 6,
-              borderRadius: 10,
-              border: bgKey === "bg1" ? "2px solid #333" : "1px solid #ddd",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-            title="배경 1"
-          >
-            <div
+          {[
+            { key: "bg1" as const, src: BG1, label: "배경 1" },
+            { key: "bg2" as const, src: BG2, label: "배경 2" },
+          ].map(({ key, src, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setBgKey(key)}
+              aria-pressed={bgKey === key}
               style={{
-                width: 56,
-                height: 36,
-                backgroundImage: `url(${BG1})`,
-                backgroundSize: "cover",
-                backgroundPosition: "top center",
-                borderRadius: 8,
+                padding: 6,
+                borderRadius: 10,
+                border: bgKey === key ? "2px solid #333" : "1px solid #ddd",
+                background: "#fff",
+                cursor: "pointer",
               }}
-            />
-          </button>
-          <button
-            type="button"
-            onClick={() => setBgKey("bg2")}
-            aria-pressed={bgKey === "bg2"}
-            style={{
-              padding: 6,
-              borderRadius: 10,
-              border: bgKey === "bg2" ? "2px solid #333" : "1px solid #ddd",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-            title="배경 2"
-          >
-            <div
-              style={{
-                width: 56,
-                height: 36,
-                backgroundImage: `url(${BG2})`,
-                backgroundSize: "cover",
-                backgroundPosition: "top center",
-                borderRadius: 8,
-              }}
-            />
-          </button>
+              title={label}
+            >
+              <div
+                style={{
+                  width: 56,
+                  height: 36,
+                  backgroundImage: `url(${src})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "top center",
+                  borderRadius: 8,
+                }}
+              />
+            </button>
+          ))}
         </div>
       </div>
-      {/* 미리보기: 4/4/2 보드 */}
+
+      {/* 미리보기 */}
       <section
         ref={previewWrapRef}
         style={{
@@ -744,7 +717,6 @@ export default function SoloEditor() {
           }}
         >
           <div
-            ref={boardContentRef}
             style={{
               transform: `scale(${previewScale})`,
               transformOrigin: "top left",

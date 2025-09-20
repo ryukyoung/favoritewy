@@ -23,6 +23,7 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ensureSignedIn } from "../lib/firebase";
 
 const IMG_COLS = COLUMN_CONFIGS.length;
 const GRID_ROWS = 4;
@@ -100,7 +101,7 @@ function drawMultilineText(
 export async function uploadImageAndGetUrl(file: File, path: string) {
   const storageRef = ref(storage, path);
 
-  // 🔽 클라이언트 압축 (대략 1MB / 긴 변 1200px)
+  // 클라이언트 압축 (대략 1MB / 긴 변 1200px)
   const compressed = await imageCompression(file, {
     maxSizeMB: 1,
     maxWidthOrHeight: 1200,
@@ -108,7 +109,7 @@ export async function uploadImageAndGetUrl(file: File, path: string) {
     initialQuality: 0.85,
   });
 
-  // 🔽 CDN 캐시/컨텐츠타입 메타데이터(선택이지만 추천)
+  // CDN 캐시/컨텐츠타입 메타데이터
   const metadata = {
     contentType: file.type || "image/jpeg",
     cacheControl: "public, max-age=31536000, immutable",
@@ -118,24 +119,48 @@ export async function uploadImageAndGetUrl(file: File, path: string) {
   return await getDownloadURL(storageRef);
 }
 
+// 헬퍼 함수들
+const clamp = (n: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, n));
+
+const makeEmptyParticipant = (): Participant => ({
+  nickname: "",
+  images: Array(IMG_COLS).fill(null),
+});
+
+// Firebase 업데이트 헬퍼
+const updateFirestore = async (
+  roomRef: any,
+  data: any,
+  errorMessage: string
+) => {
+  if (!roomRef) return;
+
+  try {
+    await updateDoc(roomRef, {
+      ...data,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error(`${errorMessage}:`, e);
+    alert(`${errorMessage}. 권한/네트워크를 확인해 주세요.`);
+  }
+};
+
 export default function MultiEditor() {
   const nav = useNavigate();
   const { roomId } = useParams<{ roomId?: string }>();
 
-  // 인원 & 데이터
+  // 상태 관리
   const [count, setCount] = useState(2);
   const [participants, setParticipants] = useState<Participant[]>(
-    Array.from({ length: 2 }, () => ({
-      nickname: "",
-      images: Array(IMG_COLS).fill(null),
-    }))
+    Array.from({ length: 2 }, makeEmptyParticipant)
   );
-  const titles = DEFAULT_TITLES;
-
-  const [countField, setCountField] = useState(String(count));
-
-  // 배경 선택
+  const [countField, setCountField] = useState("2");
   const [bgKey, setBgKey] = useState<"bg1" | "bg2">("bg1");
+  const [previewScale, setPreviewScale] = useState(1);
+
+  const titles = DEFAULT_TITLES;
   const selectedBgUrl = bgKey === "bg1" ? BG1 : BG2;
 
   // 방 레퍼런스
@@ -144,37 +169,34 @@ export default function MultiEditor() {
     [roomId]
   );
 
+  // 보드 높이 계산
+  const boardHeight = useMemo(
+    () => TOP + BOTTOM + count * CELL + (count - 1) * GAP,
+    [count]
+  );
+
+  // refs
+  const previewWrapRef = useRef<HTMLDivElement>(null);
+
   // /multi 로 들어온 경우: 방 자동 생성 → 이동
   useEffect(() => {
     if (roomId) return;
-    (async () => {
+
+    const createRoom = async () => {
       const newRef = doc(collection(db, "rooms"));
-      const initial: {
-        titles: string[];
-        participants: Participant[];
-        count: number;
-        createdAt: any;
-        updatedAt: any;
-      } = {
+      const initial = {
         titles: DEFAULT_TITLES,
-        participants,
-        count: participants.length,
+        participants: Array.from({ length: 2 }, makeEmptyParticipant),
+        count: 2,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
       await setDoc(newRef, initial);
       nav(`/multi/${newRef.id}`, { replace: true });
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
+    };
 
-  // helpers
-  const clamp = (n: number, min: number, max: number) =>
-    Math.max(min, Math.min(max, n));
-  const makeEmptyParticipant = (): Participant => ({
-    nickname: "",
-    images: Array(IMG_COLS).fill(null),
-  });
+    createRoom().catch(console.error);
+  }, [roomId, nav]);
 
   // 서버 상태 실시간 구독
   useEffect(() => {
@@ -183,6 +205,9 @@ export default function MultiEditor() {
     let initializing = true;
 
     const unsub = onSnapshot(roomRef, async (snap) => {
+      // 로그인 보장
+      await ensureSignedIn();
+
       if (!snap.exists()) {
         const base: Participant[] = [
           makeEmptyParticipant(),
@@ -198,161 +223,153 @@ export default function MultiEditor() {
         return;
       }
 
-      const data = snap.data() as any;
-
+      const data = snap.data();
       let p: Participant[] = Array.isArray(data?.participants)
         ? [...data.participants]
         : [];
+
+      // 최소 2명 보장
       if (p.length < 2) {
-        for (let i = p.length; i < 2; i++) p.push(makeEmptyParticipant());
-        void updateDoc(roomRef, {
-          participants: p,
-          updatedAt: serverTimestamp(),
-        }).catch(console.error);
+        for (let i = p.length; i < 2; i++) {
+          p.push(makeEmptyParticipant());
+        }
+        await updateFirestore(
+          roomRef,
+          { participants: p },
+          "참가자 초기화 실패"
+        );
       }
 
+      // 인원수 유효성 검사
       const c = clamp(
         typeof data?.count === "number" ? data.count : p.length || 2,
         2,
         10
       );
+
       if (data?.count !== c) {
-        void updateDoc(roomRef, {
-          count: c,
-          updatedAt: serverTimestamp(),
-        }).catch(console.error);
+        await updateFirestore(roomRef, { count: c }, "인원수 수정 실패");
       }
 
       setParticipants(p);
       setCount(c);
+
       if (initializing) {
         setCountField(String(c));
         initializing = false;
       }
     });
 
-    return () => unsub();
+    return unsub;
   }, [roomRef]);
 
   // 인원 변경
-  const onChangeCount = (n: number) => {
-    const c = Math.max(2, Math.min(10, Math.floor(n) || 2));
-    setCount(c);
-    setCountField(String(c));
-    setParticipants((prev) => {
-      const next = [...prev];
-      if (next.length < c) {
-        while (next.length < c) next.push(makeEmptyParticipant());
-      } else if (next.length > c) {
-        next.length = c;
-      }
-      if (roomRef) {
-        updateDoc(roomRef, {
-          participants: next,
-          count: c,
-          updatedAt: serverTimestamp(),
-        }).catch((e) => {
-          console.error("count update failed:", e);
-          alert("인원 수 저장에 실패했어요. 권한/네트워크를 확인해 주세요.");
-        });
-      }
-      return next;
-    });
-  };
+  const onChangeCount = useCallback(
+    (n: number) => {
+      const c = clamp(Math.floor(n) || 2, 2, 10);
+      setCount(c);
+      setCountField(String(c));
+
+      setParticipants((prev) => {
+        const next = [...prev];
+        if (next.length < c) {
+          while (next.length < c) {
+            next.push(makeEmptyParticipant());
+          }
+        } else if (next.length > c) {
+          next.length = c;
+        }
+
+        updateFirestore(
+          roomRef,
+          { participants: next, count: c },
+          "인원 수 저장 실패"
+        );
+
+        return next;
+      });
+    },
+    [roomRef]
+  );
 
   // 입력 확정 처리
-  const commitCountFromField = () => {
+  const commitCountFromField = useCallback(() => {
     const n = parseInt(countField, 10);
     if (Number.isNaN(n)) {
       setCountField(String(count));
       return;
     }
-    onChangeCount(Math.min(10, Math.max(2, n)));
-  };
+    onChangeCount(clamp(n, 2, 10));
+  }, [countField, count, onChangeCount]);
 
   // 닉네임 변경
-  const updateNickname = (idx: number, name: string) => {
-    setParticipants((prev) => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], nickname: name };
-      if (roomRef) {
-        updateDoc(roomRef, {
-          participants: next,
-          updatedAt: serverTimestamp(),
-        }).catch((e) => {
-          console.error("nickname update failed:", e);
-          alert("닉네임 저장에 실패했어요.");
-        });
-      }
-      return next;
-    });
-  };
+  const updateNickname = useCallback(
+    (idx: number, name: string) => {
+      setParticipants((prev) => {
+        const next = [...prev];
+        next[idx] = { ...next[idx], nickname: name };
+
+        updateFirestore(roomRef, { participants: next }, "닉네임 저장 실패");
+
+        return next;
+      });
+    },
+    [roomRef]
+  );
 
   // 이미지 업데이트
-  const updateImage = (
-    idx: number,
-    imgIdx: number,
-    v: File | string | null
-  ) => {
-    const persist = (imagesArray: (File | string | null)[]) => {
-      if (roomRef) {
-        updateDoc(roomRef, {
-          participants: imagesArray
-            ? participants.map((p, i) =>
-                i === idx ? { ...p, images: imagesArray } : p
-              )
-            : participants,
-          updatedAt: serverTimestamp(),
-        }).catch((e) => {
-          console.error("image update failed:", e);
-          alert("이미지 저장에 실패했어요.");
-        });
-      }
-    };
+  const updateImage = useCallback(
+    (idx: number, imgIdx: number, v: File | string | null) => {
+      setParticipants((prev) => {
+        const next = [...prev];
+        const imgs = [...(next[idx].images || [])];
 
-    setParticipants((prev) => {
-      const next = [...prev];
-      const imgs = [...(next[idx].images || [])];
+        if (v instanceof File) {
+          // 임시 URL로 즉시 표시
+          const tempUrl = URL.createObjectURL(v);
+          imgs[imgIdx] = tempUrl;
+          next[idx] = { ...next[idx], images: imgs };
 
-      if (v instanceof File) {
-        const tempUrl = URL.createObjectURL(v);
-        imgs[imgIdx] = tempUrl;
-        next[idx] = { ...next[idx], images: imgs };
-        if (roomId) {
-          const key = `${roomId}/${idx}-${imgIdx}-${Date.now()}-${v.name}`;
-          uploadImageAndGetUrl(v, key)
-            .then((url) => {
-              setParticipants((curr) => {
-                const n2 = [...curr];
-                const i2 = [...(n2[idx].images || [])];
-                i2[imgIdx] = url;
-                n2[idx] = { ...n2[idx], images: i2 };
-                if (roomRef) {
-                  updateDoc(roomRef, {
-                    participants: n2,
-                    updatedAt: serverTimestamp(),
-                  }).catch((e) => {
-                    console.error("image url save failed:", e);
-                    alert("업로드 URL 저장에 실패했어요.");
-                  });
-                }
-                return n2;
+          // Firebase 업로드
+          if (roomId) {
+            const key = `${roomId}/${idx}-${imgIdx}-${Date.now()}-${v.name}`;
+            uploadImageAndGetUrl(v, key)
+              .then((url) => {
+                setParticipants((curr) => {
+                  const n2 = [...curr];
+                  const i2 = [...(n2[idx].images || [])];
+                  i2[imgIdx] = url;
+                  n2[idx] = { ...n2[idx], images: i2 };
+
+                  updateFirestore(
+                    roomRef,
+                    { participants: n2 },
+                    "업로드 URL 저장 실패"
+                  );
+
+                  return n2;
+                });
+
+                // 임시 URL 정리
+                URL.revokeObjectURL(tempUrl);
+              })
+              .catch((e) => {
+                console.error(e);
+                alert("이미지 업로드 실패");
               });
-            })
-            .catch((e) => {
-              console.error(e);
-              alert("이미지 업로드 실패");
-            });
-        }
-      } else {
-        imgs[imgIdx] = (v as string | null) ?? null;
-        next[idx] = { ...next[idx], images: imgs };
-        persist(imgs);
-      }
+          }
+        } else {
+          imgs[imgIdx] = v;
+          next[idx] = { ...next[idx], images: imgs };
 
-      return next;
-    });
-  };
+          updateFirestore(roomRef, { participants: next }, "이미지 저장 실패");
+        }
+
+        return next;
+      });
+    },
+    [roomRef, roomId]
+  );
 
   // 이미지 로드 에러 로그
   useEffect(() => {
@@ -366,24 +383,17 @@ export default function MultiEditor() {
     return () => window.removeEventListener("error", onImgError, true);
   }, []);
 
-  // 보드 사이즈/스케일
-  const previewData = useMemo(() => participants, [participants]);
-  const boardHeight = useMemo(
-    () => TOP + BOTTOM + count * CELL + (count - 1) * GAP,
-    [count]
-  );
-  const previewWrapRef = useRef<HTMLDivElement>(null);
-  const [previewScale, setPreviewScale] = useState(1);
-
+  // 미리보기 스케일 조정
   useLayoutEffect(() => {
     const handleResize = () => {
       const wrap = previewWrapRef.current;
       if (!wrap) return;
+
       const available = wrap.clientWidth - 8;
       const fit = available / BOARD_W;
-      const s = Math.min(1, fit);
-      setPreviewScale(s);
+      setPreviewScale(Math.min(1, fit));
     };
+
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -401,60 +411,40 @@ export default function MultiEditor() {
     try {
       // 폰트 로딩 대기
       if ((document as any).fonts?.ready) {
-        try {
-          await (document as any).fonts.ready;
-        } catch {}
+        await (document as any).fonts.ready.catch(() => {});
       }
 
-      // 1. 먼저 모든 이미지를 미리 로드
-      const allImages: Array<{
-        value: File | string | null;
-        x: number;
-        y: number;
-      }> = [];
-
+      // 모든 이미지 URL 수집
+      const imageUrls: string[] = [];
       participants.forEach((participant, rowIndex) => {
         if (rowIndex >= count) return;
-
-        const rowY = TOP + rowIndex * (CELL + GAP);
 
         for (let colIndex = 0; colIndex < IMG_COLS; colIndex++) {
           const imageValue = participant.images?.[colIndex];
           if (imageValue) {
-            const cellX = LEFT_SIDE + colIndex * (CELL + GAP);
-            allImages.push({ value: imageValue, x: cellX, y: rowY });
+            const imageSrc =
+              imageValue instanceof File
+                ? URL.createObjectURL(imageValue)
+                : imageValue;
+            imageUrls.push(imageSrc);
           }
         }
       });
 
-      // 백그라운드 이미지와 모든 셀 이미지를 동시에 로드
-      const loadPromises: Promise<HTMLImageElement>[] = [
+      // 모든 이미지 로딩
+      const loadPromises = [
         loadImage(selectedBgUrl),
+        ...imageUrls.map((url) => loadImage(url)),
       ];
 
-      allImages.forEach(({ value }) => {
-        if (value) {
-          let imageSrc: string;
-          if (value instanceof File) {
-            imageSrc = URL.createObjectURL(value);
-          } else {
-            imageSrc = value;
-          }
-          loadPromises.push(loadImage(imageSrc));
-        }
-      });
-
-      // 모든 이미지 로딩 완료까지 대기
       const loadedImages = await Promise.all(loadPromises);
-      const bgImg = loadedImages[0];
-      const cellImages = loadedImages.slice(1);
+      const [bgImg, ...cellImages] = loadedImages;
 
-      // 추가 안전 대기
+      // 안전 대기
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // 2. 배경 이미지 그리기 (상단에서 크롭)
+      // 배경 그리기
       const scaleX = canvas.width / bgImg.width;
-
       ctx.drawImage(
         bgImg,
         0,
@@ -467,9 +457,8 @@ export default function MultiEditor() {
         canvas.height
       );
 
-      // 3. 각 참가자별로 그리기
+      // 참가자별 렌더링
       let cellImageIndex = 0;
-
       participants.forEach((participant, rowIndex) => {
         if (rowIndex >= count) return;
 
@@ -480,9 +469,7 @@ export default function MultiEditor() {
           ctx.font = "500 23px Arial, sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-
-          const nicknameColor = bgKey === "bg1" ? "#fff" : "#000";
-          ctx.fillStyle = nicknameColor;
+          ctx.fillStyle = bgKey === "bg1" ? "#fff" : "#000";
 
           const nicknameX = LEFT_SIDE / 2;
           const nicknameY = rowY + CELL / 2;
@@ -499,13 +486,13 @@ export default function MultiEditor() {
           );
         }
 
-        // 이미지 셀들 그리기 (이미 로드된 이미지 사용)
+        // 이미지 셀들 그리기
         for (let colIndex = 0; colIndex < IMG_COLS; colIndex++) {
           const imageValue = participant.images?.[colIndex];
           const cellX = LEFT_SIDE + colIndex * (CELL + GAP);
           const cellY = rowY;
 
-          // 셀 배경 그리기
+          // 셀 배경
           ctx.fillStyle = "#fafafa";
           ctx.fillRect(cellX, cellY, CELL, CELL);
 
@@ -515,11 +502,9 @@ export default function MultiEditor() {
 
             // object-fit: cover 효과
             const imgAspect = img.width / img.height;
-            const cellAspect = 1;
-
             let drawWidth, drawHeight, drawX, drawY;
 
-            if (imgAspect > cellAspect) {
+            if (imgAspect > 1) {
               drawHeight = CELL;
               drawWidth = CELL * imgAspect;
               drawX = cellX - (drawWidth - CELL) / 2;
@@ -531,38 +516,33 @@ export default function MultiEditor() {
               drawY = cellY - (drawHeight - CELL) / 2;
             }
 
-            // YouTube 썸네일 스케일 처리
-            let imageSrc = "";
-            if (imageValue instanceof File) {
-              imageSrc = URL.createObjectURL(imageValue);
-            } else {
-              imageSrc = imageValue;
-            }
+            // YouTube 썸네일 특별 처리
+            let imageSrc =
+              imageValue instanceof File
+                ? URL.createObjectURL(imageValue)
+                : imageValue;
 
             if (imageSrc.includes("ytimg.com")) {
               const scale = 1.4;
-              const scaledW = drawWidth * scale;
-              const scaledH = drawHeight * scale;
-              drawX = cellX - (scaledW - CELL) / 2;
-              drawY = cellY - (scaledH - CELL) / 2;
-              drawWidth = scaledW;
-              drawHeight = scaledH;
+              drawWidth *= scale;
+              drawHeight *= scale;
+              drawX = cellX - (drawWidth - CELL) / 2;
+              drawY = cellY - (drawHeight - CELL) / 2;
             }
 
+            // 클리핑 후 그리기
             ctx.save();
             ctx.beginPath();
             ctx.rect(cellX, cellY, CELL, CELL);
             ctx.clip();
-
             ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
             ctx.restore();
 
-            // File 객체 URL 정리
+            // File URL 정리
             if (imageValue instanceof File) {
               URL.revokeObjectURL(imageSrc);
             }
           } else if (!imageValue) {
-            // 이미지가 없을 때
             ctx.fillStyle = "#aaa";
             ctx.font = "12px Arial, sans-serif";
             ctx.textAlign = "center";
@@ -572,7 +552,7 @@ export default function MultiEditor() {
         }
       });
 
-      // 4. Canvas를 Blob으로 변환하여 다운로드
+      // 다운로드
       canvas.toBlob(
         (blob) => {
           if (!blob) return;
@@ -596,15 +576,24 @@ export default function MultiEditor() {
     }
   }, [selectedBgUrl, bgKey, participants, count, boardHeight]);
 
-  const boardContentRef = useRef<HTMLDivElement>(null);
+  // URL 복사 함수
+  const handleCopyUrl = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      alert("현재 방 주소를 복사했습니다.");
+    } catch {
+      alert("복사를 실패했습니다.");
+    }
+  }, []);
 
-  // 방 준비 전엔 간단 표시
+  // 방 준비 전 로딩
   if (!roomId) {
     return <div style={{ padding: 16 }}>방을 만드는 중…</div>;
   }
 
   return (
     <div style={{ padding: 16, backgroundColor: "#fff" }}>
+      {/* 헤더 */}
       <div
         style={{
           display: "grid",
@@ -618,7 +607,6 @@ export default function MultiEditor() {
           type="button"
           onClick={() => nav("/")}
           aria-label="뒤로가기"
-          title="뒤로가기"
           style={{
             width: 36,
             height: 36,
@@ -634,6 +622,7 @@ export default function MultiEditor() {
         >
           <span style={{ fontSize: 18, lineHeight: 1 }}>←</span>
         </button>
+
         <h2
           style={{
             fontSize: 20,
@@ -645,13 +634,9 @@ export default function MultiEditor() {
         >
           취향표 편집기
         </h2>
+
         <button
-          onClick={() => {
-            navigator.clipboard
-              .writeText(window.location.href)
-              .then(() => alert("현재 방 주소를 복사했습니다."))
-              .catch(() => alert("복사를 실패했습니다."));
-          }}
+          onClick={handleCopyUrl}
           style={{
             justifySelf: "end",
             width: "max-content",
@@ -661,6 +646,7 @@ export default function MultiEditor() {
             border: "1px solid #ddd",
             background: "#fff",
             color: "#000",
+            cursor: "pointer",
           }}
         >
           URL 복사
@@ -668,6 +654,7 @@ export default function MultiEditor() {
       </div>
 
       <section style={{ display: "grid", gap: 16 }}>
+        {/* 인원 수 조절 */}
         <div
           style={{
             display: "flex",
@@ -679,10 +666,11 @@ export default function MultiEditor() {
           <label style={{ fontSize: 18, display: "block", color: "#000" }}>
             인원 수 (2~10)
           </label>
+
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button
               type="button"
-              onClick={() => onChangeCount(Math.max(2, count - 1))}
+              onClick={() => onChangeCount(count - 1)}
               disabled={count <= 2}
               style={{
                 padding: "10px 10px",
@@ -690,6 +678,7 @@ export default function MultiEditor() {
                 border: "1px solid #ddd",
                 background: "#fff",
                 color: "#000",
+                cursor: count <= 2 ? "not-allowed" : "pointer",
               }}
               aria-label="감소"
             >
@@ -722,7 +711,7 @@ export default function MultiEditor() {
 
             <button
               type="button"
-              onClick={() => onChangeCount(Math.min(10, count + 1))}
+              onClick={() => onChangeCount(count + 1)}
               disabled={count >= 10}
               style={{
                 padding: "10px 12px",
@@ -730,6 +719,7 @@ export default function MultiEditor() {
                 border: "1px solid #ddd",
                 background: "#fff",
                 color: "#000",
+                cursor: count >= 10 ? "not-allowed" : "pointer",
               }}
               aria-label="증가"
             >
@@ -738,11 +728,15 @@ export default function MultiEditor() {
           </div>
         </div>
 
+        {/* 참가자 목록 */}
         <div style={{ display: "grid", gap: 20 }}>
-          {participants.map((p, i) => (
+          {participants.slice(0, count).map((p, i) => (
             <div
               key={i}
-              style={{ paddingBottom: 12, borderBottom: "1px solid #f0f0f0" }}
+              style={{
+                paddingBottom: 12,
+                borderBottom: "1px solid #f0f0f0",
+              }}
             >
               <div
                 style={{
@@ -777,41 +771,38 @@ export default function MultiEditor() {
                   gap: 10,
                 }}
               >
-                {Array.from({ length: IMG_COLS }, (_, j) => {
-                  const cfg = COLUMN_CONFIGS[j];
-                  return (
+                {COLUMN_CONFIGS.map((cfg, j) => (
+                  <div
+                    key={j}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "stretch",
+                      gap: 6,
+                    }}
+                  >
                     <div
-                      key={j}
                       style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "stretch",
-                        gap: 6,
+                        fontSize: 16,
+                        fontWeight: 500,
+                        lineHeight: 1.2,
+                        padding: "2px 2px",
+                        whiteSpace: "pre-line",
+                        overflow: "hidden",
+                        color: "#000",
                       }}
+                      title={cfg.title}
                     >
-                      <div
-                        style={{
-                          fontSize: 16,
-                          fontWeight: 500,
-                          lineHeight: 1.2,
-                          padding: "2px 2px",
-                          whiteSpace: "pre-line",
-                          overflow: "hidden",
-                          color: "#000",
-                        }}
-                        title={cfg.title}
-                      >
-                        {cfg.title}
-                      </div>
-
-                      <SmartImageCell
-                        value={p.images[j]}
-                        onChange={(v) => updateImage(i, j, v)}
-                        config={cfg}
-                      />
+                      {cfg.title}
                     </div>
-                  );
-                })}
+
+                    <SmartImageCell
+                      value={p.images[j]}
+                      onChange={(v) => updateImage(i, j, v)}
+                      config={cfg}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           ))}
@@ -839,57 +830,40 @@ export default function MultiEditor() {
           배경
         </span>
         <div style={{ display: "flex", gap: 6 }}>
-          <button
-            type="button"
-            onClick={() => setBgKey("bg1")}
-            aria-pressed={bgKey === "bg1"}
-            style={{
-              padding: 6,
-              borderRadius: 10,
-              border: bgKey === "bg1" ? "2px solid #333" : "1px solid #ddd",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-            title="배경 1"
-          >
-            <div
+          {[
+            { key: "bg1" as const, src: BG1, label: "배경 1" },
+            { key: "bg2" as const, src: BG2, label: "배경 2" },
+          ].map(({ key, src, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setBgKey(key)}
+              aria-pressed={bgKey === key}
               style={{
-                width: 56,
-                height: 36,
-                backgroundImage: `url(${BG1})`,
-                backgroundSize: "cover",
-                backgroundPosition: "top center",
-                borderRadius: 8,
+                padding: 6,
+                borderRadius: 10,
+                border: bgKey === key ? "2px solid #333" : "1px solid #ddd",
+                background: "#fff",
+                cursor: "pointer",
               }}
-            />
-          </button>
-          <button
-            type="button"
-            onClick={() => setBgKey("bg2")}
-            aria-pressed={bgKey === "bg2"}
-            style={{
-              padding: 6,
-              borderRadius: 10,
-              border: bgKey === "bg2" ? "2px solid #333" : "1px solid #ddd",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-            title="배경 2"
-          >
-            <div
-              style={{
-                width: 56,
-                height: 36,
-                backgroundImage: `url(${BG2})`,
-                backgroundSize: "cover",
-                backgroundPosition: "top center",
-                borderRadius: 8,
-              }}
-            />
-          </button>
+              title={label}
+            >
+              <div
+                style={{
+                  width: 56,
+                  height: 36,
+                  backgroundImage: `url(${src})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "top center",
+                  borderRadius: 8,
+                }}
+              />
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* 미리보기 */}
       <section
         ref={previewWrapRef}
         style={{
@@ -921,10 +895,9 @@ export default function MultiEditor() {
               backgroundPosition: "top center",
               backgroundRepeat: "no-repeat",
             }}
-            ref={boardContentRef}
           >
             <CollageBoard
-              participants={previewData}
+              participants={participants.slice(0, count)}
               titles={titles}
               cell={CELL}
               gap={GAP}
@@ -943,6 +916,7 @@ export default function MultiEditor() {
         </div>
       </section>
 
+      {/* 저장 버튼 */}
       <div style={{ marginTop: 20, display: "grid", gap: 8 }}>
         <button
           onClick={handleSave}
