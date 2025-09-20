@@ -114,6 +114,22 @@ export default function Home() {
             {creating ? "방 만드는 중..." : "다인(함께 만들기)"}
           </button>
         </div>
+        <button
+          onClick={() => nav("/manual")}
+          style={{
+            background: "#fff",
+            color: "#000",
+            borderRadius: 10,
+            border: "1px solid #ddd",
+            fontWeight: 500,
+            cursor: "pointer",
+            fontSize: 16,
+            width: "100%",
+            marginTop: -30,
+          }}
+        >
+          사용 방법
+        </button>
       </div>
 
       {/* 하단 저작권 문구 */}

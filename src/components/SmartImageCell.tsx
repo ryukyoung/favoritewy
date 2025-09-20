@@ -368,7 +368,9 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         >
           {valueSummary}
         </div>
-        <span style={{ fontSize: 12, opacity: 0.6 }}>{open ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 12, opacity: 0.6, color: "#ff7ed0" }}>
+          {open ? "▲" : "▼"}
+        </span>
       </button>
 
       <input

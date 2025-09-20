@@ -180,7 +180,7 @@ export default function CollageBoardSingle({
                     }}
                   />
                 ) : (
-                  <span style={{ fontSize: 12, color: "#aaa" }}>♥</span>
+                  <span style={{ fontSize: 12, color: "#aaa" }}></span>
                 )}
               </div>
             );
