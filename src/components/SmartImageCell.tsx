@@ -142,9 +142,11 @@ const YoutubePanel = ({
 
     try {
       // 터치 디버깅 정보
+      const touch = e.touches[0];
       const touchInfo = {
-        touchType: e.touches[0]?.touchType || "unknown",
-        force: e.touches[0]?.force || "N/A",
+        touchesCount: e.touches.length,
+        clientX: touch?.clientX || "N/A",
+        clientY: touch?.clientY || "N/A",
         targetTag: (e.target as HTMLElement)?.tagName,
         pointerEvents: window.getComputedStyle(input).pointerEvents,
         zIndex: window.getComputedStyle(input).zIndex,
