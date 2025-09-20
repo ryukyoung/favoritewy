@@ -70,7 +70,7 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
     mode: "preset",
     presets: [
       { label: "ELEVEN", url: "../assets/album/eleven-album.jpeg" },
-      { label: "LOVE DIVE", url: "../assets/album/lovedive-album.jpeg" },
+      { label: "LOVE DIVE", url: "../assets/album/lovedive-album.jpg" },
       { label: "After Like", url: "../assets/album/afterlike-album.jpg" },
       { label: "I've IVE", url: "../assets/album/iveive-album.jpeg" },
       { label: "I'VE MINE", url: "../assets/album/ivemine-album.jpeg" },
