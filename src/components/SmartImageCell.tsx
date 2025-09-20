@@ -92,17 +92,11 @@ const YoutubePanel = ({
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 패널이 열리면 input에 자동으로 포커스 (모바일에서는 약간 지연)
+  // 패널이 열리면 input에 자동으로 포커스
   useEffect(() => {
-    const focusInput = () => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    };
-
-    // 모바일에서는 약간의 지연이 필요할 수 있음
-    const timer = setTimeout(focusInput, 100);
-    return () => clearTimeout(timer);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
   }, []);
 
   const applyYoutubeUrl = () => {
@@ -118,16 +112,10 @@ const YoutubePanel = ({
   return (
     <div style={{ display: "grid", gap: 8 }}>
       <input
-        ref={inputRef}
         id="youtube-url"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        // 모바일 이벤트 처리 개선
-        onTouchStart={(e) => e.stopPropagation()}
-        onTouchEnd={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        onFocus={(e) => e.stopPropagation()}
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
@@ -140,17 +128,13 @@ const YoutubePanel = ({
         placeholder="예) https://youtu.be/abcdEFG1234"
         style={{
           padding: "10px 12px",
-          fontSize: 16, // iOS에서 줌 방지를 위해 16px 이상
+          fontSize: 14,
           borderRadius: 8,
           border: "1px solid #ddd",
-          // 모바일 최적화
-          WebkitAppearance: "none",
-          appearance: "none",
         }}
       />
       <button
         onClick={applyYoutubeUrl}
-        onTouchStart={(e) => e.stopPropagation()}
         disabled={!query.trim()}
         style={{
           padding: "10px 12px",
@@ -259,30 +243,11 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       setOpen(false);
     };
 
-    // 모바일 터치 이벤트도 추가
-    const onDocTouchStart = (e: TouchEvent) => {
-      const a = anchorRef.current;
-      const p = panelRef.current;
-      const t = e.target as Node | null;
-      if (!t) return;
-
-      // 앵커/패널 내부면 닫지 않음
-      if (a?.contains(t)) return;
-      if (p?.contains(t)) return;
-
-      setOpen(false);
-    };
-
     document.addEventListener("pointerdown", onDocPointerDown, {
       passive: true,
     });
-    document.addEventListener("touchstart", onDocTouchStart, {
-      passive: true,
-    });
-
     return () => {
       document.removeEventListener("pointerdown", onDocPointerDown);
-      document.removeEventListener("touchstart", onDocTouchStart);
     };
   }, [open]);
 
@@ -318,7 +283,6 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
             onChange(p.url);
             setOpen(false);
           }}
-          onTouchStart={(e) => e.stopPropagation()}
           style={{
             padding: "10px 12px",
             borderRadius: 10,
@@ -348,7 +312,6 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         <div style={{ display: "grid", gap: 8 }}>
           <button
             onClick={openFilePicker}
-            onTouchStart={(e) => e.stopPropagation()}
             style={{
               padding: "12px 14px",
               fontSize: 14,
@@ -373,7 +336,6 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         <div style={{ display: "grid", gap: 10 }}>
           <button
             onClick={openFilePicker}
-            onTouchStart={(e) => e.stopPropagation()}
             style={{
               padding: "12px 14px",
               fontSize: 14,
@@ -411,19 +373,10 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       <button
         ref={anchorRef}
         type="button"
-        // 모바일 터치 이벤트 개선
-        onTouchStart={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onTouchEnd={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen(true);
-        }}
         onPointerDown={(e) => {
           e.preventDefault(); // 중복 클릭 방지
           e.stopPropagation(); // 밖-클릭 감지기까지 안 올리기
+          setOpen(true); // ← 토글 말고 '열기'만!
         }}
         onClick={(e) => {
           // 키보드/스크린리더 호환 보강
@@ -440,9 +393,6 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
           background: "#fff",
           border: "none",
           outline: "none",
-          // 모바일 터치 최적화
-          touchAction: "manipulation",
-          WebkitTapHighlightColor: "transparent",
         }}
       >
         <div
@@ -476,13 +426,10 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       {open &&
         createPortal(
           <div
-            ref={panelRef}
             id="sic-panel"
             style={overlayStyle}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            onTouchEnd={(e) => e.stopPropagation()}
           >
             <div style={{ padding: 13 }}>
               <OverlayBody />
