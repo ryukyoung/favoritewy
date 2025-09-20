@@ -80,7 +80,7 @@ function AutoFitLabel({
   );
 }
 
-// YouTube 입력 패널을 별도 컴포넌트로 분리 (모바일 디버깅 및 수정 버전)
+// YouTube 입력 패널을 별도 컴포넌트로 분리
 const YoutubePanel = ({
   onChange,
   onHide,
@@ -97,12 +97,11 @@ const YoutubePanel = ({
     const timestamp = new Date().toLocaleTimeString();
     const logEntry = `[${timestamp}] ${message}`;
     console.log(logEntry);
-    setDebugLog((prev) => [...prev.slice(-4), logEntry]); // 최근 5개만 유지
+    setDebugLog((prev) => [...prev.slice(-4), logEntry]);
   };
 
-  // 패널이 열리면 input에 자동으로 포커스 - 일단 비활성화
   useEffect(() => {
-    addDebugLog("패널 열림 - 자동포커스 비활성화");
+    addDebugLog("패널 열림");
   }, []);
 
   const applyYoutubeUrl = () => {
@@ -126,13 +125,7 @@ const YoutubePanel = ({
     addDebugLog("🔘 수동 포커스 시도");
     try {
       input.focus();
-
-      // 강제 키보드 활성화 시도
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        input.click();
-        input.setSelectionRange(0, input.value.length);
-        addDebugLog("📱 모바일 키보드 활성화 시도");
-      }
+      addDebugLog("포커스 호출 완료");
     } catch (error) {
       addDebugLog(`❌ 포커스 에러: ${error}`);
     }
@@ -140,10 +133,10 @@ const YoutubePanel = ({
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      {/* 디버깅 로그 표시 - 여러 줄 */}
+      {/* 디버깅 로그 표시 */}
       <div
         style={{
-          fontSize: 11,
+          fontSize: 10,
           background: "#f5f5f5",
           padding: 8,
           borderRadius: 4,
@@ -166,8 +159,8 @@ const YoutubePanel = ({
       <button
         onClick={handleManualFocus}
         style={{
-          padding: "8px 12px",
-          fontSize: 12,
+          padding: "12px 16px",
+          fontSize: 14,
           borderRadius: 6,
           border: "2px solid #007AFF",
           background: "#E3F2FD",
@@ -183,22 +176,22 @@ const YoutubePanel = ({
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => addDebugLog("✅ 포커스 획득!")}
-        onBlur={() => addDebugLog("❌ 포커스 잃음")}
+        onFocus={() => addDebugLog("✅ INPUT 포커스 획득!")}
+        onBlur={() => addDebugLog("❌ INPUT 포커스 잃음")}
         onInput={() => addDebugLog("⌨️ 입력 중")}
         placeholder="YouTube URL 입력"
         style={{
           width: "100%",
-          padding: "12px",
+          padding: "15px",
           fontSize: 16,
-          border: "1px solid #ccc",
+          border: "2px solid #007AFF",
           borderRadius: 4,
+          outline: "none",
         }}
       />
 
       <button
         onClick={applyYoutubeUrl}
-        onTouchStart={(e) => e.stopPropagation()}
         disabled={!query.trim()}
         style={{
           padding: "10px 12px",
@@ -210,45 +203,6 @@ const YoutubePanel = ({
         }}
       >
         선택
-      </button>
-
-      {/* 디버깅용 정보 버튼 */}
-      <button
-        onClick={() => {
-          const input = inputRef.current;
-          if (input) {
-            const rect = input.getBoundingClientRect();
-            const computedStyle = window.getComputedStyle(input);
-            const info = `
-📍 입력창 위치: ${Math.round(rect.top)}, ${Math.round(rect.left)}
-📏 크기: ${Math.round(rect.width)} × ${Math.round(rect.height)}
-👁️ 화면 내: ${rect.top >= 0 && rect.bottom <= window.innerHeight}
-🎯 활성 요소: ${document.activeElement?.tagName || "NONE"}
-⌨️ 키보드 추정: ${Math.max(
-              0,
-              window.innerHeight -
-                (window.visualViewport?.height || window.innerHeight)
-            )}px
-🖱️ 포인터: ${computedStyle.pointerEvents}
-🔢 z-index: ${computedStyle.zIndex}
-📱 UA: ${
-              /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-                ? "Mobile"
-                : "Desktop"
-            }
-            `.trim();
-            alert(info);
-          }
-        }}
-        style={{
-          padding: "6px 10px",
-          fontSize: 11,
-          borderRadius: 4,
-          border: "1px solid #ccc",
-          background: "#f9f9f9",
-        }}
-      >
-        🔍 상세 정보
       </button>
     </div>
   );
@@ -334,13 +288,12 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     };
   }, [open, calcOverlayPos]);
 
-  // 밖 클릭 감지 - 단순하고 안정적으로
+  // 밖 클릭 감지
   useEffect(() => {
     if (!open) return;
 
-    let isIgnoring = true; // 처음엔 무시
+    let isIgnoring = true;
 
-    // 짧은 지연 후 감지 시작
     const enableTimer = setTimeout(() => {
       isIgnoring = false;
       console.log("밖 클릭 감지 활성화");
@@ -424,10 +377,10 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         >
           <AutoFitLabel
             text={p.label}
-            maxLines={2} // 2줄 넘치면 폰트 줄임
-            baseFont={14} // 시작 폰트
-            minFont={8} // 최소 폰트
-            lineH={1.2} // 라인 높이
+            maxLines={2}
+            baseFont={14}
+            minFont={8}
+            lineH={1.2}
           />
         </button>
       ))}
@@ -495,10 +448,9 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         width: "100%",
         boxSizing: "border-box",
         minWidth: 0,
-        // overflow: "hidden", // 제거: 패널이 보이지 않는 원인
         border: "1px solid #e9e9e9",
         borderRadius: 12,
-        position: "relative", // 추가: 자식의 absolute 포지셔닝을 위해
+        position: "relative",
       }}
     >
       <button
@@ -506,10 +458,9 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         type="button"
         onClick={(e) => {
           console.log("버튼 클릭!", { open, timestamp: Date.now() });
-          e.preventDefault(); // 기본 동작 방지
-          e.stopPropagation(); // 이벤트 전파 방지
+          e.preventDefault();
+          e.stopPropagation();
 
-          // 토글이 아니라 상태를 명확히 설정
           if (!open) {
             console.log("패널 열기 시도");
             setOpen(true);
@@ -528,7 +479,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
           background: "#fff",
           border: "none",
           outline: "none",
-          touchAction: "manipulation", // 모바일 터치 최적화
+          touchAction: "manipulation",
           WebkitTapHighlightColor: "transparent",
         }}
       >
@@ -560,13 +511,12 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         style={{ display: "none" }}
       />
 
-      {/* 오버레이 위치 계산을 적용한 패널 */}
       {open && (
         <div
           id="sic-panel"
           style={{
-            ...overlayStyle, // 원래 오버레이 위치 계산 적용
-            position: "fixed", // absolute 대신 fixed 사용
+            ...overlayStyle,
+            position: "fixed",
           }}
           onTouchStart={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
