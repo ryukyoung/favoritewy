@@ -1,7 +1,4 @@
-// 상태 변화 감지
-useEffect(() => {
-  console.log("📱 open 상태 변화:", open);
-}, [open]); // src/components/SmartImageCell.tsx
+// src/components/SmartImageCell.tsx
 import {
   useState,
   useRef,
@@ -94,15 +91,15 @@ const YoutubePanel = ({
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 패널이 열리면 input에 자동으로 포커스 (모바일 친화적으로 수정)
+  // 패널이 열리면 input에 자동으로 포커스 (충분한 지연으로 안정성 확보)
   useEffect(() => {
-    // 자동 포커스를 일단 제거해서 수동으로 테스트
-    // const timer = setTimeout(() => {
-    //   if (inputRef.current) {
-    //     inputRef.current.focus();
-    //   }
-    // }, 150);
-    // return () => clearTimeout(timer);
+    const timer = setTimeout(() => {
+      if (inputRef.current) {
+        console.log("자동 포커스 시도");
+        inputRef.current.focus();
+      }
+    }, 300); // 300ms로 지연 증가
+    return () => clearTimeout(timer);
   }, []);
 
   const applyYoutubeUrl = () => {
@@ -122,7 +119,6 @@ const YoutubePanel = ({
         id="youtube-url"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        // 이벤트 차단을 최소화
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
@@ -174,6 +170,11 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 상태 변화 감지
+  useEffect(() => {
+    console.log("open 상태 변화:", open);
+  }, [open]);
 
   const valueSummary = (() => {
     if (!value) return "선택 없음";
@@ -248,12 +249,12 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     // 짧은 지연 후 감지 시작
     const enableTimer = setTimeout(() => {
       isIgnoring = false;
-      console.log("📱 밖 클릭 감지 활성화");
+      console.log("밖 클릭 감지 활성화");
     }, 100);
 
     const handleOutsideClick = (e: Event) => {
       if (isIgnoring) {
-        console.log("📱 밖 클릭 무시 중");
+        console.log("밖 클릭 무시 중");
         return;
       }
 
@@ -261,7 +262,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       const a = anchorRef.current;
       const panel = document.getElementById("sic-panel");
 
-      console.log("📱 밖 클릭 감지:", {
+      console.log("밖 클릭 감지:", {
         target: target?.nodeName,
         isAnchor: a?.contains(target),
         isPanel: panel?.contains(target),
@@ -271,7 +272,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       if (a?.contains(target)) return;
       if (panel?.contains(target)) return;
 
-      console.log("🔴 밖 클릭으로 패널 닫기");
+      console.log("밖 클릭으로 패널 닫기");
       setOpen(false);
     };
 
@@ -411,16 +412,16 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         type="button"
         onClick={(e) => {
           alert(`버튼 클릭! open: ${open}`); // 임시 디버깅
-          console.log("🔴 버튼 클릭!", { open, timestamp: Date.now() });
+          console.log("버튼 클릭!", { open, timestamp: Date.now() });
           e.preventDefault(); // 기본 동작 방지
           e.stopPropagation(); // 이벤트 전파 방지
 
           // 토글이 아니라 상태를 명확히 설정
           if (!open) {
-            console.log("🟢 패널 열기 시도");
+            console.log("패널 열기 시도");
             setOpen(true);
           } else {
-            console.log("🔴 패널 닫기 시도");
+            console.log("패널 닫기 시도");
             setOpen(false);
           }
         }}
