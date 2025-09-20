@@ -80,7 +80,7 @@ function AutoFitLabel({
   );
 }
 
-// YouTube 입력 패널을 별도 컴포넌트로 분리
+// YouTube 입력 패널을 별도 컴포넌트로 분리 (모바일 디버깅 및 수정 버전)
 const YoutubePanel = ({
   onChange,
   onHide,
@@ -89,6 +89,7 @@ const YoutubePanel = ({
   onHide: () => void;
 }) => {
   const [query, setQuery] = useState("");
+  const [debugInfo, setDebugInfo] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 패널이 열리면 input에 자동으로 포커스 (충분한 지연으로 안정성 확보)
@@ -96,9 +97,17 @@ const YoutubePanel = ({
     const timer = setTimeout(() => {
       if (inputRef.current) {
         console.log("자동 포커스 시도");
-        inputRef.current.focus();
+        setDebugInfo("자동 포커스 시도 완료");
+        try {
+          inputRef.current.focus();
+          // 모바일에서 포커스 강제 적용
+          inputRef.current.click();
+          setDebugInfo("포커스 + 클릭 완료");
+        } catch (error) {
+          setDebugInfo(`포커스 에러: ${error}`);
+        }
       }
-    }, 300); // 300ms로 지연 증가
+    }, 100); // 지연 시간을 줄여서 테스트
     return () => clearTimeout(timer);
   }, []);
 
@@ -112,15 +121,91 @@ const YoutubePanel = ({
     onHide();
   };
 
+  // 입력창 클릭 핸들러
+  const handleInputClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const input = inputRef.current;
+    if (!input) {
+      setDebugInfo("입력창 참조 없음");
+      return;
+    }
+
+    try {
+      // 모바일 디버깅 정보
+      const info = {
+        readOnly: input.readOnly,
+        disabled: input.disabled,
+        focused: document.activeElement === input,
+        clientHeight: input.clientHeight,
+        offsetHeight: input.offsetHeight,
+        scrollHeight: input.scrollHeight,
+        style: window.getComputedStyle(input).pointerEvents,
+        userAgent: navigator.userAgent.includes("Mobile")
+          ? "Mobile"
+          : "Desktop",
+      };
+
+      setDebugInfo(`클릭 정보: ${JSON.stringify(info, null, 2)}`);
+
+      // 강제 포커스 시도
+      input.focus();
+
+      // iOS 특별 처리
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        // iOS에서는 사용자 제스처 이벤트에서만 키보드가 올라옴
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    } catch (error) {
+      setDebugInfo(`클릭 에러: ${error}`);
+    }
+  };
+
+  // 터치 핸들러
+  const handleInputTouch = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    setDebugInfo("터치 이벤트 발생");
+
+    // 터치 후 약간의 지연을 두고 포커스
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 50);
+  };
+
   return (
     <div style={{ display: "grid", gap: 8 }}>
+      {/* 디버깅 정보 표시 */}
+      {debugInfo && (
+        <div
+          style={{
+            fontSize: 10,
+            background: "#f0f0f0",
+            padding: 4,
+            borderRadius: 4,
+            wordBreak: "break-all",
+            maxHeight: 100,
+            overflow: "auto",
+          }}
+        >
+          {debugInfo}
+        </div>
+      )}
+
       <input
         ref={inputRef}
         id="youtube-url"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        onClick={handleInputClick}
+        onTouchStart={handleInputTouch}
+        onFocus={() => setDebugInfo("포커스 획득")}
+        onBlur={() => setDebugInfo("포커스 잃음")}
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
+          setDebugInfo("붙여넣기 이벤트");
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
           const text = e.clipboardData?.getData("text") ?? "";
           if (text) {
@@ -130,17 +215,34 @@ const YoutubePanel = ({
         }}
         placeholder="예) https://youtu.be/abcdEFG1234"
         style={{
-          padding: "10px 12px",
+          padding: "12px 15px", // 패딩 증가
           fontSize: 16, // iOS 자동줌 방지
           borderRadius: 8,
-          border: "1px solid #ddd",
+          border: "2px solid #ddd", // 테두리 두껍게
           WebkitAppearance: "none",
           appearance: "none",
           // 추가 모바일 스타일
           WebkitUserSelect: "text",
           userSelect: "text",
+          // 중요: 터치 이벤트 허용
+          touchAction: "manipulation",
+          WebkitTapHighlightColor: "rgba(0,0,0,0.1)",
+          // 포인터 이벤트 확실히 허용
+          pointerEvents: "auto",
+          // 모바일에서 입력창이 제대로 작동하도록
+          WebkitTouchCallout: "default",
+          WebkitUserModify: "read-write",
+          // z-index 추가
+          position: "relative",
+          zIndex: 1000,
         }}
+        // 추가 속성들
+        autoComplete="off"
+        spellCheck="false"
+        autoCapitalize="off"
+        autoCorrect="off"
       />
+
       <button
         onClick={applyYoutubeUrl}
         onTouchStart={(e) => e.stopPropagation()}
@@ -155,6 +257,36 @@ const YoutubePanel = ({
         }}
       >
         선택
+      </button>
+
+      {/* 디버깅용 버튼 */}
+      <button
+        onClick={() => {
+          const input = inputRef.current;
+          if (input) {
+            const rect = input.getBoundingClientRect();
+            const info = `
+              입력창 위치: ${rect.top}, ${rect.left}
+              크기: ${rect.width}x${rect.height}
+              화면 내 위치: ${rect.top > 0 && rect.bottom < window.innerHeight}
+              활성 요소: ${document.activeElement?.tagName}
+              키보드 높이 추정: ${
+                window.innerHeight -
+                (window.visualViewport?.height || window.innerHeight)
+              }
+            `;
+            alert(info);
+          }
+        }}
+        style={{
+          padding: "8px 12px",
+          fontSize: 12,
+          borderRadius: 6,
+          border: "1px solid #ccc",
+          background: "#f9f9f9",
+        }}
+      >
+        디버그 정보
       </button>
     </div>
   );
@@ -411,7 +543,6 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         ref={anchorRef}
         type="button"
         onClick={(e) => {
-          alert(`버튼 클릭! open: ${open}`); // 임시 디버깅
           console.log("버튼 클릭!", { open, timestamp: Date.now() });
           e.preventDefault(); // 기본 동작 방지
           e.stopPropagation(); // 이벤트 전파 방지
