@@ -80,184 +80,83 @@ function AutoFitLabel({
   );
 }
 
-// YouTube 입력 패널을 별도 컴포넌트로 분리
-const YoutubePanel = ({
+// YouTube 직접 입력 컴포넌트 (패널 없이 바로 화면에 표시)
+const DirectYoutubeInput = ({
+  value,
   onChange,
-  onHide,
 }: {
+  value: File | string | null;
   onChange: (v: string) => void;
-  onHide: () => void;
 }) => {
   const [query, setQuery] = useState("");
-  const [debugLog, setDebugLog] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 디버그 로그 추가 함수
-  const addDebugLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const logEntry = `[${timestamp}] ${message}`;
-    console.log(logEntry);
-    setDebugLog((prev) => [...prev.slice(-4), logEntry]);
-  };
-
+  // 기존 값이 YouTube 썸네일 URL인지 확인하여 초기값 설정
   useEffect(() => {
-    addDebugLog("패널 열림");
-  }, []);
+    if (typeof value === "string" && value.includes("ytimg.com")) {
+      // 기존 YouTube 썸네일이 있으면 입력창은 비워둠 (또는 원한다면 URL을 역변환)
+      setQuery("");
+    }
+  }, [value]);
 
   const applyYoutubeUrl = () => {
-    const id = getYoutubeId(query.trim());
+    const trimmed = query.trim();
+    if (!trimmed) {
+      onChange(""); // 빈 값으로 클리어
+      return;
+    }
+
+    const id = getYoutubeId(trimmed);
     if (!id) {
       alert("유효한 YouTube URL 또는 영상 ID를 입력해 주세요.");
       return;
     }
     onChange(getYoutubeThumb(id, "hq"));
-    onHide();
   };
 
-  // 수동 포커스 버튼
-  const handleManualFocus = () => {
-    const input = inputRef.current;
-    if (!input) {
-      addDebugLog("❌ 입력창 참조 없음");
-      return;
-    }
-
-    addDebugLog("🔘 수동 포커스 시도");
-
-    // 강제로 읽기전용 해제하고 포커스
-    input.readOnly = false;
-    input.disabled = false;
-
-    // 여러 방법으로 포커스 시도
-    try {
-      input.focus();
-      addDebugLog("1차 포커스 호출");
-
-      // 약간의 지연 후 다시 포커스 (키보드가 내려가는 것 방지)
-      setTimeout(() => {
-        input.focus();
-        input.click(); // 모바일에서 키보드 강제 활성화
-        addDebugLog("2차 포커스+클릭 호출");
-
-        // iOS 전용 처리
-        if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-          input.setSelectionRange(0, input.value.length);
-          addDebugLog("iOS 선택 설정");
-        }
-      }, 100);
-
-      // 3차 시도 (더 긴 지연)
-      setTimeout(() => {
-        if (document.activeElement !== input) {
-          input.focus();
-          addDebugLog("3차 포커스 재시도");
-        }
-      }, 300);
-    } catch (error) {
-      addDebugLog(`❌ 포커스 에러: ${error}`);
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      applyYoutubeUrl();
     }
   };
 
   return (
-    <div style={{ display: "grid", gap: 8 }}>
-      {/* 디버깅 로그 표시 */}
-      <div
-        style={{
-          fontSize: 10,
-          background: "#f5f5f5",
-          padding: 8,
-          borderRadius: 4,
-          fontFamily: "monospace",
-          maxHeight: 120,
-          overflow: "auto",
-          border: "1px solid #ddd",
-        }}
-      >
-        {debugLog.length === 0
-          ? "로그 대기중..."
-          : debugLog.map((log, idx) => (
-              <div key={idx} style={{ marginBottom: 2 }}>
-                {log}
-              </div>
-            ))}
-      </div>
-
-      {/* 수동 포커스 버튼 */}
-      <button
-        onClick={handleManualFocus}
-        style={{
-          padding: "12px 16px",
-          fontSize: 14,
-          borderRadius: 6,
-          border: "2px solid #007AFF",
-          background: "#E3F2FD",
-          color: "#007AFF",
-          fontWeight: "bold",
-        }}
-      >
-        🔘 수동으로 입력창 활성화
-      </button>
-
+    <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
       <input
         ref={inputRef}
         type="text"
         value={query}
-        readOnly={false} // 명시적으로 읽기전용 해제
-        disabled={false} // 명시적으로 비활성화 해제
         onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => addDebugLog("✅ INPUT 포커스 획득!")}
-        onBlur={(e) => {
-          // 포커스를 잃는 원인을 찾기 위해 더 자세히 로그
-          const relatedTarget = e.relatedTarget as HTMLElement;
-          const targetInfo = relatedTarget
-            ? `${relatedTarget.tagName}.${relatedTarget.className}`
-            : "NULL";
-          addDebugLog(`❌ INPUT 포커스 잃음 -> ${targetInfo}`);
-        }}
-        onInput={() => addDebugLog("⌨️ 입력 중")}
-        onTouchStart={(e) => {
-          // preventDefault 제거 (passive 이벤트 경고 해결)
-          e.stopPropagation(); // 이벤트 전파 방지만 유지
-          addDebugLog("INPUT 터치됨");
-        }}
-        onClick={(e) => {
-          // preventDefault 제거
-          e.stopPropagation(); // 이벤트 전파 방지만 유지
-          addDebugLog("INPUT 클릭됨");
-        }}
+        onKeyDown={handleKeyDown}
         placeholder="YouTube URL 입력"
         style={{
-          width: "100%",
-          padding: "15px",
-          fontSize: 16, // 16px 이상이어야 iOS에서 줌 안됨
-          border: "2px solid #007AFF",
-          borderRadius: 4,
+          flex: 1,
+          padding: "10px 12px",
+          fontSize: 14,
+          border: "1px solid #ddd",
+          borderRadius: 8,
           outline: "none",
-          // 모바일 키보드 방지 속성들 제거
-          touchAction: "auto", // manipulation 대신 auto
-          WebkitUserSelect: "text", // 텍스트 선택 허용
-          userSelect: "text",
         }}
-        // 자동완성 등 제거
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck="false"
       />
-
       <button
         onClick={applyYoutubeUrl}
-        disabled={!query.trim()}
         style={{
           padding: "10px 12px",
           fontSize: 14,
           borderRadius: 8,
           border: "1px solid #ddd",
-          background: "#fff",
+          background: query.trim() ? "#ff7ed0" : "#fff",
+          color: query.trim() ? "#fff" : "#333",
+          cursor: "pointer",
           whiteSpace: "nowrap",
         }}
       >
-        선택
+        적용
       </button>
     </div>
   );
@@ -279,6 +178,26 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     console.log("open 상태 변화:", open);
   }, [open]);
 
+  // YouTube 모드인 경우 직접 입력창 표시
+  if (config.mode === "youtube") {
+    return (
+      <div
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          minWidth: 0,
+          border: "1px solid #e9e9e9",
+          borderRadius: 12,
+          padding: "12px",
+          background: "#fff",
+        }}
+      >
+        <DirectYoutubeInput value={value} onChange={(v) => onChange(v)} />
+      </div>
+    );
+  }
+
+  // 기존 토글 방식 (YouTube가 아닌 다른 모드들)
   const valueSummary = (() => {
     if (!value) return "선택 없음";
     if (value instanceof File) return `파일(${value.name})`;
@@ -460,10 +379,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       );
     }
 
-    if (config.mode === "youtube") {
-      return <YoutubePanel onChange={onChange} onHide={() => setOpen(false)} />;
-    }
-
+    // youtube 모드는 이미 위에서 처리되므로 여기 도달하지 않음
     return null;
   };
 

@@ -11,7 +11,6 @@ export type ColumnConfig = {
 export const COLUMN_CONFIGS: ColumnConfig[] = [
   { title: "셀카", mode: "upload" },
   { title: "남찍사", mode: "upload" },
-  { title: "무대", mode: "youtube" }, // ← URL/ID만 입력 받아 썸네일로 변환
   {
     title: "모에화",
     mode: "preset+upload",
@@ -127,4 +126,5 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
       { label: "인형즈", url: "../assets/chemi/인형즈.jpeg" },
     ],
   },
+  { title: "무대", mode: "youtube" }, // ← URL/ID만 입력 받아 썸네일로 변환
 ];
