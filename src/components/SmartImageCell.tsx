@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
 import type { PresetItem, ColumnConfig } from "../columnConfig";
 import { getYoutubeId, getYoutubeThumb } from "../youtubeUtil";
 
@@ -120,8 +121,12 @@ const YoutubePanel = ({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         // 이벤트 차단을 최소화
-        onTouchStart={() => {}}
-        onMouseDown={() => {}}
+        onTouchStart={(e) => {
+          // e.stopPropagation(); // 일단 제거
+        }}
+        onMouseDown={(e) => {
+          // e.stopPropagation(); // 일단 제거
+        }}
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
@@ -187,7 +192,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
   })();
 
   // 오버레이 위치
-  const [, setOverlayStyle] = useState<React.CSSProperties>({});
+  const [overlayStyle, setOverlayStyle] = useState<React.CSSProperties>({});
   const calcOverlayPos = useCallback(() => {
     const el = anchorRef.current;
     if (!el) return;
@@ -238,33 +243,44 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     };
   }, [open, calcOverlayPos]);
 
-  // 밖 클릭 감지 - 터치와 마우스 모두 처리
+  // 밖 클릭 감지 - 패널이 열린 후 잠시 지연
   useEffect(() => {
     if (!open) return;
 
-    const handleOutsideClick = (e: Event) => {
-      const target = e.target as Node;
-      const a = anchorRef.current;
-      const panel = document.getElementById("sic-panel");
+    // 패널이 열린 직후엔 밖 클릭 감지를 잠시 지연
+    const timer = setTimeout(() => {
+      const handleOutsideClick = (e: Event) => {
+        const target = e.target as Node;
+        const a = anchorRef.current;
+        const panel = document.getElementById("sic-panel");
 
-      if (!target) return;
-      if (a?.contains(target)) return;
-      if (panel?.contains(target)) return;
+        if (!target) return;
+        if (a?.contains(target)) return;
+        if (panel?.contains(target)) return;
 
-      setOpen(false);
-    };
+        setOpen(false);
+      };
 
-    // 터치와 마우스 모두 감지
-    document.addEventListener("touchstart", handleOutsideClick, {
-      passive: true,
-    });
-    document.addEventListener("mousedown", handleOutsideClick, {
-      passive: true,
-    });
+      // 터치와 마우스 모두 감지
+      document.addEventListener("touchstart", handleOutsideClick, {
+        passive: true,
+      });
+      document.addEventListener("mousedown", handleOutsideClick, {
+        passive: true,
+      });
+
+      // 클린업을 위해 timer ref에 저장
+      (timer as any).cleanup = () => {
+        document.removeEventListener("touchstart", handleOutsideClick);
+        document.removeEventListener("mousedown", handleOutsideClick);
+      };
+    }, 200); // 200ms 지연
 
     return () => {
-      document.removeEventListener("touchstart", handleOutsideClick);
-      document.removeEventListener("mousedown", handleOutsideClick);
+      clearTimeout(timer);
+      if ((timer as any).cleanup) {
+        (timer as any).cleanup();
+      }
     };
   }, [open]);
 
@@ -437,22 +453,13 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         style={{ display: "none" }}
       />
 
-      {/* Portal 대신 일반 div로 테스트 */}
+      {/* 오버레이 위치 계산을 적용한 패널 */}
       {open && (
         <div
           id="sic-panel"
           style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            marginTop: 8,
-            background: "#fff",
-            width: 300,
-            border: "1px solid #eaeaea",
-            borderRadius: 12,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-            zIndex: 9999,
+            ...overlayStyle, // 원래 오버레이 위치 계산 적용
+            position: "fixed", // absolute 대신 fixed 사용
           }}
           onTouchStart={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
