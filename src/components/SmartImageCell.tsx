@@ -235,44 +235,36 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     };
   }, [open, calcOverlayPos]);
 
-  // 밖 클릭 감지 - 패널이 열린 후 잠시 지연
+  // 밖 클릭 감지 - 단순하고 안정적으로
   useEffect(() => {
     if (!open) return;
 
-    // 패널이 열린 직후엔 밖 클릭 감지를 잠시 지연
-    const timer = setTimeout(() => {
-      const handleOutsideClick = (e: Event) => {
-        const target = e.target as Node;
-        const a = anchorRef.current;
-        const panel = document.getElementById("sic-panel");
+    let isIgnoring = true; // 처음엔 무시
 
-        if (!target) return;
-        if (a?.contains(target)) return;
-        if (panel?.contains(target)) return;
+    // 짧은 지연 후 감지 시작
+    const enableTimer = setTimeout(() => {
+      isIgnoring = false;
+    }, 100);
 
-        setOpen(false);
-      };
+    const handleOutsideClick = (e: Event) => {
+      if (isIgnoring) return; // 지연 중이면 무시
 
-      // 터치와 마우스 모두 감지
-      document.addEventListener("touchstart", handleOutsideClick, {
-        passive: true,
-      });
-      document.addEventListener("mousedown", handleOutsideClick, {
-        passive: true,
-      });
+      const target = e.target as Node;
+      const a = anchorRef.current;
+      const panel = document.getElementById("sic-panel");
 
-      // 클린업을 위해 timer ref에 저장
-      (timer as any).cleanup = () => {
-        document.removeEventListener("touchstart", handleOutsideClick);
-        document.removeEventListener("mousedown", handleOutsideClick);
-      };
-    }, 200); // 200ms 지연
+      if (!target) return;
+      if (a?.contains(target)) return;
+      if (panel?.contains(target)) return;
+
+      setOpen(false);
+    };
+
+    document.addEventListener("click", handleOutsideClick, { passive: true });
 
     return () => {
-      clearTimeout(timer);
-      if ((timer as any).cleanup) {
-        (timer as any).cleanup();
-      }
+      clearTimeout(enableTimer);
+      document.removeEventListener("click", handleOutsideClick);
     };
   }, [open]);
 
@@ -402,7 +394,17 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       <button
         ref={anchorRef}
         type="button"
-        onClick={() => setOpen((v) => !v)} // 토글 유지
+        onClick={(e) => {
+          e.preventDefault(); // 기본 동작 방지
+          e.stopPropagation(); // 이벤트 전파 방지
+
+          // 토글이 아니라 상태를 명확히 설정
+          if (!open) {
+            setOpen(true);
+          } else {
+            setOpen(false);
+          }
+        }}
         style={{
           width: "100%",
           display: "flex",
