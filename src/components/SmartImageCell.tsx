@@ -7,7 +7,6 @@ import {
   useLayoutEffect,
   type CSSProperties,
 } from "react";
-import { createPortal } from "react-dom";
 import type { PresetItem, ColumnConfig } from "../columnConfig";
 import { getYoutubeId, getYoutubeThumb } from "../youtubeUtil";
 
@@ -121,12 +120,8 @@ const YoutubePanel = ({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         // 이벤트 차단을 최소화
-        onTouchStart={(e) => {
-          // e.stopPropagation(); // 일단 제거
-        }}
-        onMouseDown={(e) => {
-          // e.stopPropagation(); // 일단 제거
-        }}
+        onTouchStart={() => {}}
+        onMouseDown={() => {}}
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
@@ -151,7 +146,7 @@ const YoutubePanel = ({
       />
       <button
         onClick={applyYoutubeUrl}
-        onTouchStart={(e) => e.stopPropagation()}
+        onTouchStart={() => {}}
         disabled={!query.trim()}
         style={{
           padding: "10px 12px",
@@ -192,7 +187,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
   })();
 
   // 오버레이 위치
-  const [overlayStyle, setOverlayStyle] = useState<React.CSSProperties>({});
+  const [, setOverlayStyle] = useState<React.CSSProperties>({});
   const calcOverlayPos = useCallback(() => {
     const el = anchorRef.current;
     if (!el) return;
