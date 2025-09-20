@@ -1,4 +1,7 @@
-// src/components/SmartImageCell.tsx
+// 상태 변화 감지
+useEffect(() => {
+  console.log("📱 open 상태 변화:", open);
+}, [open]); // src/components/SmartImageCell.tsx
 import {
   useState,
   useRef,
@@ -119,6 +122,7 @@ const YoutubePanel = ({
         id="youtube-url"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        // 이벤트 차단을 최소화
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
@@ -244,19 +248,30 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     // 짧은 지연 후 감지 시작
     const enableTimer = setTimeout(() => {
       isIgnoring = false;
+      console.log("📱 밖 클릭 감지 활성화");
     }, 100);
 
     const handleOutsideClick = (e: Event) => {
-      if (isIgnoring) return; // 지연 중이면 무시
+      if (isIgnoring) {
+        console.log("📱 밖 클릭 무시 중");
+        return;
+      }
 
       const target = e.target as Node;
       const a = anchorRef.current;
       const panel = document.getElementById("sic-panel");
 
+      console.log("📱 밖 클릭 감지:", {
+        target: target?.nodeName,
+        isAnchor: a?.contains(target),
+        isPanel: panel?.contains(target),
+      });
+
       if (!target) return;
       if (a?.contains(target)) return;
       if (panel?.contains(target)) return;
 
+      console.log("🔴 밖 클릭으로 패널 닫기");
       setOpen(false);
     };
 
@@ -395,13 +410,17 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         ref={anchorRef}
         type="button"
         onClick={(e) => {
+          alert(`버튼 클릭! open: ${open}`); // 임시 디버깅
+          console.log("🔴 버튼 클릭!", { open, timestamp: Date.now() });
           e.preventDefault(); // 기본 동작 방지
           e.stopPropagation(); // 이벤트 전파 방지
 
           // 토글이 아니라 상태를 명확히 설정
           if (!open) {
+            console.log("🟢 패널 열기 시도");
             setOpen(true);
           } else {
+            console.log("🔴 패널 닫기 시도");
             setOpen(false);
           }
         }}
