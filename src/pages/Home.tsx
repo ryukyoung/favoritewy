@@ -55,7 +55,7 @@ export default function Home() {
       {/* 중앙 래퍼: 실제 가로폭 확보 */}
       <div
         style={{
-          transform: "translateY(10px)",
+          transform: "translateY(20px)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
