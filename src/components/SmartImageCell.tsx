@@ -115,7 +115,6 @@ const YoutubePanel = ({
         id="youtube-url"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onPointerDown={(e) => e.stopPropagation()}
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
@@ -161,7 +160,6 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   const valueSummary = (() => {
     if (!value) return "선택 없음";
@@ -229,26 +227,19 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
 
   useEffect(() => {
     if (!open) return;
-
-    const onDocPointerDown = (e: PointerEvent) => {
+    const onDoc = (e: MouseEvent) => {
       const a = anchorRef.current;
-      const p = panelRef.current;
-      const t = e.target as Node | null;
-      if (!t) return;
-
-      // 앵커/패널 내부면 닫지 않음
-      if (a?.contains(t)) return;
-      if (p?.contains(t)) return;
-
-      setOpen(false);
+      const panel = document.getElementById("sic-panel");
+      if (
+        e.target instanceof Node &&
+        !a?.contains(e.target) &&
+        !panel?.contains(e.target)
+      ) {
+        setOpen(false);
+      }
     };
-
-    document.addEventListener("pointerdown", onDocPointerDown, {
-      passive: true,
-    });
-    return () => {
-      document.removeEventListener("pointerdown", onDocPointerDown);
-    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
   // 업로드
@@ -373,16 +364,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       <button
         ref={anchorRef}
         type="button"
-        onPointerDown={(e) => {
-          e.preventDefault(); // 중복 클릭 방지
-          e.stopPropagation(); // 밖-클릭 감지기까지 안 올리기
-          setOpen(true); // ← 토글 말고 '열기'만!
-        }}
-        onClick={(e) => {
-          // 키보드/스크린리더 호환 보강
-          e.stopPropagation();
-          setOpen(true);
-        }}
+        onClick={() => setOpen((v) => !v)}
         style={{
           width: "100%",
           display: "flex",
@@ -428,8 +410,8 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
           <div
             id="sic-panel"
             style={overlayStyle}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
           >
             <div style={{ padding: 13 }}>
               <OverlayBody />
