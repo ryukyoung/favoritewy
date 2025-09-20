@@ -123,9 +123,36 @@ const YoutubePanel = ({
     }
 
     addDebugLog("🔘 수동 포커스 시도");
+
+    // 강제로 읽기전용 해제하고 포커스
+    input.readOnly = false;
+    input.disabled = false;
+
+    // 여러 방법으로 포커스 시도
     try {
       input.focus();
-      addDebugLog("포커스 호출 완료");
+      addDebugLog("1차 포커스 호출");
+
+      // 약간의 지연 후 다시 포커스 (키보드가 내려가는 것 방지)
+      setTimeout(() => {
+        input.focus();
+        input.click(); // 모바일에서 키보드 강제 활성화
+        addDebugLog("2차 포커스+클릭 호출");
+
+        // iOS 전용 처리
+        if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+          input.setSelectionRange(0, input.value.length);
+          addDebugLog("iOS 선택 설정");
+        }
+      }, 100);
+
+      // 3차 시도 (더 긴 지연)
+      setTimeout(() => {
+        if (document.activeElement !== input) {
+          input.focus();
+          addDebugLog("3차 포커스 재시도");
+        }
+      }, 300);
     } catch (error) {
       addDebugLog(`❌ 포커스 에러: ${error}`);
     }
@@ -175,6 +202,8 @@ const YoutubePanel = ({
         ref={inputRef}
         type="text"
         value={query}
+        readOnly={false} // 명시적으로 읽기전용 해제
+        disabled={false} // 명시적으로 비활성화 해제
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => addDebugLog("✅ INPUT 포커스 획득!")}
         onBlur={(e) => {
@@ -186,15 +215,34 @@ const YoutubePanel = ({
           addDebugLog(`❌ INPUT 포커스 잃음 -> ${targetInfo}`);
         }}
         onInput={() => addDebugLog("⌨️ 입력 중")}
+        onTouchStart={(e) => {
+          // preventDefault 제거 (passive 이벤트 경고 해결)
+          e.stopPropagation(); // 이벤트 전파 방지만 유지
+          addDebugLog("INPUT 터치됨");
+        }}
+        onClick={(e) => {
+          // preventDefault 제거
+          e.stopPropagation(); // 이벤트 전파 방지만 유지
+          addDebugLog("INPUT 클릭됨");
+        }}
         placeholder="YouTube URL 입력"
         style={{
           width: "100%",
           padding: "15px",
-          fontSize: 16,
+          fontSize: 16, // 16px 이상이어야 iOS에서 줌 안됨
           border: "2px solid #007AFF",
           borderRadius: 4,
           outline: "none",
+          // 모바일 키보드 방지 속성들 제거
+          touchAction: "auto", // manipulation 대신 auto
+          WebkitUserSelect: "text", // 텍스트 선택 허용
+          userSelect: "text",
         }}
+        // 자동완성 등 제거
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck="false"
       />
 
       <button
