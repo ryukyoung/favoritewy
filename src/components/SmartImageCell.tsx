@@ -390,9 +390,10 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         width: "100%",
         boxSizing: "border-box",
         minWidth: 0,
-        overflow: "hidden",
+        // overflow: "hidden", // 제거: 패널이 보이지 않는 원인
         border: "1px solid #e9e9e9",
         borderRadius: 12,
+        position: "relative", // 추가: 자식의 absolute 포지셔닝을 위해
       }}
     >
       <button
@@ -441,21 +442,32 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         style={{ display: "none" }}
       />
 
-      {open &&
-        createPortal(
-          <div
-            id="sic-panel"
-            style={overlayStyle}
-            onTouchStart={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ padding: 13 }}>
-              <OverlayBody />
-            </div>
-          </div>,
-          document.body
-        )}
+      {/* Portal 대신 일반 div로 테스트 */}
+      {open && (
+        <div
+          id="sic-panel"
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            marginTop: 8,
+            background: "#fff",
+            width: 300,
+            border: "1px solid #eaeaea",
+            borderRadius: 12,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+            zIndex: 9999,
+          }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ padding: 13 }}>
+            <OverlayBody />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
