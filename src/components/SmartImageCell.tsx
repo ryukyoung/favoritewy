@@ -94,13 +94,13 @@ const YoutubePanel = ({
 
   // 패널이 열리면 input에 자동으로 포커스 (모바일 친화적으로 수정)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        inputRef.current.click(); // 모바일에서 가끔 필요
-      }
-    }, 150); // 충분한 지연
-    return () => clearTimeout(timer);
+    // 자동 포커스를 일단 제거해서 수동으로 테스트
+    // const timer = setTimeout(() => {
+    //   if (inputRef.current) {
+    //     inputRef.current.focus();
+    //   }
+    // }, 150);
+    // return () => clearTimeout(timer);
   }, []);
 
   const applyYoutubeUrl = () => {
@@ -120,11 +120,12 @@ const YoutubePanel = ({
         id="youtube-url"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        // 이벤트 차단을 최소화
         onTouchStart={(e) => {
-          e.stopPropagation(); // 터치 이벤트 차단
+          // e.stopPropagation(); // 일단 제거
         }}
         onMouseDown={(e) => {
-          e.stopPropagation(); // 마우스 이벤트 차단
+          // e.stopPropagation(); // 일단 제거
         }}
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
@@ -143,6 +144,9 @@ const YoutubePanel = ({
           border: "1px solid #ddd",
           WebkitAppearance: "none",
           appearance: "none",
+          // 추가 모바일 스타일
+          WebkitUserSelect: "text",
+          userSelect: "text",
         }}
       />
       <button
