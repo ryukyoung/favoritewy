@@ -119,9 +119,6 @@ const YoutubePanel = ({
         id="youtube-url"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        // 이벤트 차단을 최소화
-        onTouchStart={() => {}}
-        onMouseDown={() => {}}
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
@@ -146,7 +143,7 @@ const YoutubePanel = ({
       />
       <button
         onClick={applyYoutubeUrl}
-        onTouchStart={() => {}}
+        onTouchStart={(e) => e.stopPropagation()}
         disabled={!query.trim()}
         style={{
           padding: "10px 12px",
@@ -187,7 +184,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
   })();
 
   // 오버레이 위치
-  const [, setOverlayStyle] = useState<React.CSSProperties>({});
+  const [overlayStyle, setOverlayStyle] = useState<React.CSSProperties>({});
   const calcOverlayPos = useCallback(() => {
     const el = anchorRef.current;
     if (!el) return;
@@ -437,22 +434,13 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         style={{ display: "none" }}
       />
 
-      {/* Portal 대신 일반 div로 테스트 */}
+      {/* 오버레이 위치 계산을 적용한 패널 */}
       {open && (
         <div
           id="sic-panel"
           style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            marginTop: 8,
-            background: "#fff",
-            width: 300,
-            border: "1px solid #eaeaea",
-            borderRadius: 12,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-            zIndex: 9999,
+            ...overlayStyle, // 원래 오버레이 위치 계산 적용
+            position: "fixed", // absolute 대신 fixed 사용
           }}
           onTouchStart={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
