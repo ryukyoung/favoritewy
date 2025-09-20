@@ -91,6 +91,7 @@ const YoutubePanel = ({
   const [query, setQuery] = useState("");
   const [debugInfo, setDebugInfo] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const touchStarted = useRef(false); // 터치 이벤트 중복 방지
 
   // 패널이 열리면 input에 자동으로 포커스 (충분한 지연으로 안정성 확보)
   useEffect(() => {
@@ -121,58 +122,98 @@ const YoutubePanel = ({
     onHide();
   };
 
-  // 입력창 클릭 핸들러
-  const handleInputClick = (e: React.MouseEvent) => {
-    e.preventDefault();
+  // 디버그 정보 업데이트 함수
+  const updateDebugInfo = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setDebugInfo(`[${timestamp}] ${message}`);
+  };
+
+  // 터치 핸들러
+  const handleInputTouch = (e: React.TouchEvent) => {
     e.stopPropagation();
+    touchStarted.current = true;
+    updateDebugInfo("터치 이벤트 발생");
 
     const input = inputRef.current;
     if (!input) {
-      setDebugInfo("입력창 참조 없음");
+      updateDebugInfo("터치: 입력창 참조 없음");
       return;
     }
 
     try {
-      // 모바일 디버깅 정보
-      const info = {
+      // 터치 디버깅 정보
+      const touchInfo = {
+        touchType: e.touches[0]?.touchType || "unknown",
+        force: e.touches[0]?.force || "N/A",
+        targetTag: (e.target as HTMLElement)?.tagName,
+        pointerEvents: window.getComputedStyle(input).pointerEvents,
+        zIndex: window.getComputedStyle(input).zIndex,
+      };
+
+      updateDebugInfo(`터치 정보: ${JSON.stringify(touchInfo)}`);
+
+      // 터치 후 포커스 시도
+      input.focus();
+
+      // iOS 특별 처리
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    } catch (error) {
+      updateDebugInfo(`터치 에러: ${error}`);
+    }
+
+    // 300ms 후 터치 플래그 리셋 (클릭 이벤트 중복 방지)
+    setTimeout(() => {
+      touchStarted.current = false;
+    }, 300);
+  };
+
+  // 입력창 클릭 핸들러
+  const handleInputClick = (e: React.MouseEvent) => {
+    // 터치 이벤트 후 발생한 클릭이면 무시
+    if (touchStarted.current) {
+      updateDebugInfo("클릭 무시됨 (터치 후 클릭)");
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    updateDebugInfo("클릭 이벤트 발생");
+
+    const input = inputRef.current;
+    if (!input) {
+      updateDebugInfo("클릭: 입력창 참조 없음");
+      return;
+    }
+
+    try {
+      // 클릭 디버깅 정보
+      const clickInfo = {
         readOnly: input.readOnly,
         disabled: input.disabled,
         focused: document.activeElement === input,
-        clientHeight: input.clientHeight,
-        offsetHeight: input.offsetHeight,
-        scrollHeight: input.scrollHeight,
-        style: window.getComputedStyle(input).pointerEvents,
-        userAgent: navigator.userAgent.includes("Mobile")
+        activeElement: document.activeElement?.tagName,
+        pointerEvents: window.getComputedStyle(input).pointerEvents,
+        display: window.getComputedStyle(input).display,
+        visibility: window.getComputedStyle(input).visibility,
+        userAgent: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent)
           ? "Mobile"
           : "Desktop",
       };
 
-      setDebugInfo(`클릭 정보: ${JSON.stringify(info, null, 2)}`);
+      updateDebugInfo(`클릭 정보: ${JSON.stringify(clickInfo, null, 1)}`);
 
       // 강제 포커스 시도
       input.focus();
 
       // iOS 특별 처리
       if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-        // iOS에서는 사용자 제스처 이벤트에서만 키보드가 올라옴
         input.setSelectionRange(input.value.length, input.value.length);
       }
     } catch (error) {
-      setDebugInfo(`클릭 에러: ${error}`);
+      updateDebugInfo(`클릭 에러: ${error}`);
     }
-  };
-
-  // 터치 핸들러
-  const handleInputTouch = (e: React.TouchEvent) => {
-    e.stopPropagation();
-    setDebugInfo("터치 이벤트 발생");
-
-    // 터치 후 약간의 지연을 두고 포커스
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 50);
   };
 
   return (
@@ -201,11 +242,11 @@ const YoutubePanel = ({
         onChange={(e) => setQuery(e.target.value)}
         onClick={handleInputClick}
         onTouchStart={handleInputTouch}
-        onFocus={() => setDebugInfo("포커스 획득")}
-        onBlur={() => setDebugInfo("포커스 잃음")}
+        onFocus={() => updateDebugInfo("포커스 획득 ✓")}
+        onBlur={() => updateDebugInfo("포커스 잃음")}
         onPaste={(e) => {
           console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
-          setDebugInfo("붙여넣기 이벤트");
+          updateDebugInfo("붙여넣기 이벤트");
           // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
           const text = e.clipboardData?.getData("text") ?? "";
           if (text) {
@@ -213,6 +254,8 @@ const YoutubePanel = ({
             setQuery((prev) => prev + text);
           }
         }}
+        onInput={() => updateDebugInfo("입력 중...")}
+        onKeyDown={(e) => updateDebugInfo(`키 입력: ${e.key}`)}
         placeholder="예) https://youtu.be/abcdEFG1234"
         style={{
           padding: "12px 15px", // 패딩 증가
