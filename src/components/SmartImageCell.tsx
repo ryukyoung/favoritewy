@@ -177,7 +177,14 @@ const YoutubePanel = ({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => addDebugLog("✅ INPUT 포커스 획득!")}
-        onBlur={() => addDebugLog("❌ INPUT 포커스 잃음")}
+        onBlur={(e) => {
+          // 포커스를 잃는 원인을 찾기 위해 더 자세히 로그
+          const relatedTarget = e.relatedTarget as HTMLElement;
+          const targetInfo = relatedTarget
+            ? `${relatedTarget.tagName}.${relatedTarget.className}`
+            : "NULL";
+          addDebugLog(`❌ INPUT 포커스 잃음 -> ${targetInfo}`);
+        }}
         onInput={() => addDebugLog("⌨️ 입력 중")}
         placeholder="YouTube URL 입력"
         style={{
@@ -288,46 +295,16 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     };
   }, [open, calcOverlayPos]);
 
-  // 밖 클릭 감지
+  // 밖 클릭 감지 - 임시로 완전히 비활성화
   useEffect(() => {
     if (!open) return;
+    console.log("밖 클릭 감지 비활성화됨 - 테스트용");
 
-    let isIgnoring = true;
-
-    const enableTimer = setTimeout(() => {
-      isIgnoring = false;
-      console.log("밖 클릭 감지 활성화");
-    }, 100);
-
-    const handleOutsideClick = (e: Event) => {
-      if (isIgnoring) {
-        console.log("밖 클릭 무시 중");
-        return;
-      }
-
-      const target = e.target as Node;
-      const a = anchorRef.current;
-      const panel = document.getElementById("sic-panel");
-
-      console.log("밖 클릭 감지:", {
-        target: target?.nodeName,
-        isAnchor: a?.contains(target),
-        isPanel: panel?.contains(target),
-      });
-
-      if (!target) return;
-      if (a?.contains(target)) return;
-      if (panel?.contains(target)) return;
-
-      console.log("밖 클릭으로 패널 닫기");
-      setOpen(false);
-    };
-
-    document.addEventListener("click", handleOutsideClick, { passive: true });
-
+    // ESC 키만 유지
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
     return () => {
-      clearTimeout(enableTimer);
-      document.removeEventListener("click", handleOutsideClick);
+      window.removeEventListener("keydown", onKey);
     };
   }, [open]);
 
