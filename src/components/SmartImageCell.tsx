@@ -91,7 +91,6 @@ const YoutubePanel = ({
   const [query, setQuery] = useState("");
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const touchStarted = useRef(false);
 
   // 디버그 로그 추가 함수
   const addDebugLog = (message: string) => {
@@ -114,37 +113,6 @@ const YoutubePanel = ({
     }
     onChange(getYoutubeThumb(id, "hq"));
     onHide();
-  };
-
-  // 터치 핸들러 - 단순화
-  const handleInputTouch = (e: React.TouchEvent) => {
-    e.stopPropagation();
-    touchStarted.current = true;
-    addDebugLog("👆 터치시작");
-
-    // 터치 후 300ms 동안 클릭 이벤트 무시
-    setTimeout(() => {
-      touchStarted.current = false;
-      addDebugLog("터치 플래그 리셋");
-    }, 300);
-  };
-
-  // 클릭 핸들러 - 단순화
-  const handleInputClick = (e: React.MouseEvent) => {
-    if (touchStarted.current) {
-      addDebugLog("🚫 클릭 무시 (터치 중)");
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    addDebugLog("🖱️ 클릭 발생");
-
-    const input = inputRef.current;
-    if (input) {
-      addDebugLog("포커스 시도...");
-      input.focus();
-    }
   };
 
   // 수동 포커스 버튼
@@ -212,44 +180,20 @@ const YoutubePanel = ({
 
       <input
         ref={inputRef}
-        id="youtube-url"
+        type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onClick={handleInputClick}
-        onTouchStart={handleInputTouch}
         onFocus={() => addDebugLog("✅ 포커스 획득!")}
         onBlur={() => addDebugLog("❌ 포커스 잃음")}
-        onPaste={(e) => {
-          addDebugLog("📋 붙여넣기");
-          const text = e.clipboardData?.getData("text") ?? "";
-          if (text) {
-            e.preventDefault();
-            setQuery((prev) => prev + text);
-          }
-        }}
         onInput={() => addDebugLog("⌨️ 입력 중")}
-        onKeyDown={(e) => addDebugLog(`🔤 키: ${e.key}`)}
-        placeholder="예) https://youtu.be/abcdEFG1234"
+        placeholder="YouTube URL 입력"
         style={{
-          padding: "15px 18px", // 더 큰 터치 영역
+          width: "100%",
+          padding: "12px",
           fontSize: 16,
-          borderRadius: 8,
-          border: "2px solid #007AFF",
-          outline: "none",
-          WebkitAppearance: "none",
-          appearance: "none",
-          // 모바일 최적화
-          touchAction: "manipulation",
-          WebkitTapHighlightColor: "transparent",
-          WebkitUserSelect: "text",
-          userSelect: "text",
-          // 추가 모바일 스타일
-          WebkitTouchCallout: "default",
+          border: "1px solid #ccc",
+          borderRadius: 4,
         }}
-        autoComplete="off"
-        spellCheck="false"
-        autoCapitalize="off"
-        autoCorrect="off"
       />
 
       <button
