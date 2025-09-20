@@ -81,6 +81,75 @@ function AutoFitLabel({
   );
 }
 
+// YouTube 입력 패널을 별도 컴포넌트로 분리
+const YoutubePanel = ({
+  onChange,
+  onHide,
+}: {
+  onChange: (v: string) => void;
+  onHide: () => void;
+}) => {
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 패널이 열리면 input에 자동으로 포커스
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
+
+  const applyYoutubeUrl = () => {
+    const id = getYoutubeId(query.trim());
+    if (!id) {
+      alert("유효한 YouTube URL 또는 영상 ID를 입력해 주세요.");
+      return;
+    }
+    onChange(getYoutubeThumb(id, "hq"));
+    onHide();
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <input
+        id="youtube-url"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onPaste={(e) => {
+          console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
+          // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
+          const text = e.clipboardData?.getData("text") ?? "";
+          if (text) {
+            e.preventDefault();
+            setQuery((prev) => prev + text);
+          }
+        }}
+        placeholder="예) https://youtu.be/abcdEFG1234"
+        style={{
+          padding: "10px 12px",
+          fontSize: 14,
+          borderRadius: 8,
+          border: "1px solid #ddd",
+        }}
+      />
+      <button
+        onClick={applyYoutubeUrl}
+        disabled={!query.trim()}
+        style={{
+          padding: "10px 12px",
+          fontSize: 14,
+          borderRadius: 8,
+          border: "1px solid #ddd",
+          background: "#fff",
+          whiteSpace: "nowrap",
+        }}
+      >
+        선택
+      </button>
+    </div>
+  );
+};
+
 type Props = {
   value: File | string | null;
   onChange: (v: File | string | null) => void;
@@ -160,15 +229,14 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
       const a = anchorRef.current;
-      if (
-        a &&
-        e.target instanceof Node &&
-        (a === e.target || a.contains(e.target))
-      )
-        return;
       const panel = document.getElementById("sic-panel");
-      if (panel && e.target instanceof Node && panel.contains(e.target)) return;
-      setOpen(false);
+      if (
+        e.target instanceof Node &&
+        !a?.contains(e.target) &&
+        !panel?.contains(e.target)
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -183,18 +251,6 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
       setOpen(false);
       e.target.value = "";
     }
-  };
-
-  // 유튜브(URL/ID → 썸네일)
-  const [query, setQuery] = useState("");
-  const applyYoutubeUrl = () => {
-    const id = getYoutubeId(query.trim());
-    if (!id) {
-      alert("유효한 YouTube URL 또는 영상 ID를 입력해 주세요.");
-      return;
-    }
-    onChange(getYoutubeThumb(id, "hq"));
-    setOpen(false);
   };
 
   const renderPresetGrid = (presets: PresetItem[]) => (
@@ -288,38 +344,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
     }
 
     if (config.mode === "youtube") {
-      return (
-        <div style={{ display: "grid", gap: 8 }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") applyYoutubeUrl();
-            }}
-            placeholder="예) https://youtu.be/abcdEFG1234"
-            style={{
-              padding: "10px 12px",
-              fontSize: 14,
-              borderRadius: 8,
-              border: "1px solid #ddd",
-            }}
-          />
-          <button
-            onClick={applyYoutubeUrl}
-            disabled={!query.trim()}
-            style={{
-              padding: "10px 12px",
-              fontSize: 14,
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: "#fff",
-              whiteSpace: "nowrap",
-            }}
-          >
-            선택
-          </button>
-        </div>
-      );
+      return <YoutubePanel onChange={onChange} onHide={() => setOpen(false)} />;
     }
 
     return null;
@@ -333,7 +358,6 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         minWidth: 0,
         overflow: "hidden",
         border: "1px solid #e9e9e9",
-
         borderRadius: 12,
       }}
     >
@@ -386,6 +410,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
           <div
             id="sic-panel"
             style={overlayStyle}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ padding: 13 }}>

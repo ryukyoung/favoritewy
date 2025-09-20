@@ -93,6 +93,9 @@ export default function CollageBoardSingle({
   // (가독성 보강하고 싶으면 textShadow 주석 해제)
   const nicknameShadow = bgKey === "bg1" ? "0 1px 2px rgba(0,0,0,.45)" : "none";
 
+  const isYoutubeThumbSrc = (src: string) =>
+    /(?:^|\/\/)(?:i\.)?ytimg\.com|img\.youtube\.com/i.test(src);
+
   return (
     <div
       style={{
@@ -177,6 +180,10 @@ export default function CollageBoardSingle({
                       height: "100%",
                       objectFit: "cover",
                       display: "block",
+                      transform: isYoutubeThumbSrc(src)
+                        ? "scale(1.4)"
+                        : undefined,
+                      transformOrigin: "50% 50%",
                     }}
                   />
                 ) : (

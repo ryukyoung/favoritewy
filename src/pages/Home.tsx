@@ -59,7 +59,7 @@ export default function Home() {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 40,
+          gap: 30,
           maxWidth: 520, // ✅ 원하는 최대 폭
           boxSizing: "border-box", // ✅ 패딩 포함 계산
         }}
@@ -125,7 +125,7 @@ export default function Home() {
             cursor: "pointer",
             fontSize: 16,
             width: "100%",
-            marginTop: -30,
+            marginTop: -20,
           }}
         >
           사용 방법

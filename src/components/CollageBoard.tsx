@@ -65,6 +65,9 @@ export default function CollageBoard({
   const rowY = (r: number) => margins.top + r * (cell + gap);
   const colX = (c: number) => gridStartX + c * (cell + gap);
 
+  const isYoutubeThumbSrc = (src: string) =>
+    /(?:^|\/\/)(?:i\.)?ytimg\.com|img\.youtube\.com/i.test(src);
+
   // ✅ 배경에 따라 닉네임 색상 자동 결정
   const nicknameColor = bgKey === "bg1" ? "#fff" : "#000";
 
@@ -137,9 +140,10 @@ export default function CollageBoard({
                     height: "100%",
                     objectFit: "cover",
                     display: "block",
-                    transform: src.includes("ytimg.com")
+                    transform: isYoutubeThumbSrc(src)
                       ? "scale(1.4)"
                       : undefined,
+                    transformOrigin: "50% 50%",
                   }}
                 />
               ) : (

@@ -137,6 +137,8 @@ async function drawImageCell(
 
     const img = await loadImage(imageSrc);
 
+    const isYoutubeThumbSrc = (src: string) =>
+      /(?:^|\/\/)(?:i\.)?ytimg\.com|img\.youtube\.com/i.test(src);
     // object-fit: cover 효과
     const imgAspect = img.width / img.height;
     let drawWidth, drawHeight, drawX, drawY;
@@ -153,6 +155,15 @@ async function drawImageCell(
       drawY = y - (drawHeight - size) / 2;
     }
 
+    if (typeof imageValue === "string" && isYoutubeThumbSrc(imageValue)) {
+      const SCALE = 1.4;
+      const cx = x + size / 2;
+      const cy = y + size / 2;
+      drawWidth *= SCALE;
+      drawHeight *= SCALE;
+      drawX = cx - drawWidth / 2;
+      drawY = cy - drawHeight / 2;
+    }
     // 클리핑 영역 설정
     ctx.save();
     ctx.beginPath();
@@ -601,7 +612,6 @@ export default function SoloEditor() {
           취향표 편집기
         </h2>
       </div>
-
       <section style={{ display: "grid", gap: 16 }}>
         {/* 닉네임 */}
         <div>
@@ -640,7 +650,6 @@ export default function SoloEditor() {
           {renderRow([9], 3)}
         </div>
       </section>
-
       {/* 배경 선택 */}
       <div
         style={{
@@ -694,7 +703,6 @@ export default function SoloEditor() {
           ))}
         </div>
       </div>
-
       {/* 미리보기 */}
       <section
         ref={previewWrapRef}
@@ -744,11 +752,11 @@ export default function SoloEditor() {
           </div>
         </div>
       </section>
-
       {/* 저장 버튼 */}
       <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
         <button
           onClick={handleSave}
+          type="button"
           style={{
             width: "100%",
             padding: "14px 16px",
