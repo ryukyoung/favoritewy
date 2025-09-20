@@ -89,27 +89,21 @@ const YoutubePanel = ({
   onHide: () => void;
 }) => {
   const [query, setQuery] = useState("");
-  const [debugInfo, setDebugInfo] = useState("");
+  const [debugLog, setDebugLog] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const touchStarted = useRef(false); // 터치 이벤트 중복 방지
+  const touchStarted = useRef(false);
 
-  // 패널이 열리면 input에 자동으로 포커스 (충분한 지연으로 안정성 확보)
+  // 디버그 로그 추가 함수
+  const addDebugLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = `[${timestamp}] ${message}`;
+    console.log(logEntry);
+    setDebugLog((prev) => [...prev.slice(-4), logEntry]); // 최근 5개만 유지
+  };
+
+  // 패널이 열리면 input에 자동으로 포커스 - 일단 비활성화
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (inputRef.current) {
-        console.log("자동 포커스 시도");
-        setDebugInfo("자동 포커스 시도 완료");
-        try {
-          inputRef.current.focus();
-          // 모바일에서 포커스 강제 적용
-          inputRef.current.click();
-          setDebugInfo("포커스 + 클릭 완료");
-        } catch (error) {
-          setDebugInfo(`포커스 에러: ${error}`);
-        }
-      }
-    }, 100); // 지연 시간을 줄여서 테스트
-    return () => clearTimeout(timer);
+    addDebugLog("패널 열림 - 자동포커스 비활성화");
   }, []);
 
   const applyYoutubeUrl = () => {
@@ -122,120 +116,99 @@ const YoutubePanel = ({
     onHide();
   };
 
-  // 디버그 정보 업데이트 함수
-  const updateDebugInfo = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setDebugInfo(`[${timestamp}] ${message}`);
-  };
-
-  // 터치 핸들러
+  // 터치 핸들러 - 단순화
   const handleInputTouch = (e: React.TouchEvent) => {
     e.stopPropagation();
     touchStarted.current = true;
-    updateDebugInfo("터치 이벤트 발생");
+    addDebugLog("👆 터치시작");
 
-    const input = inputRef.current;
-    if (!input) {
-      updateDebugInfo("터치: 입력창 참조 없음");
-      return;
-    }
-
-    try {
-      // 터치 디버깅 정보
-      const touch = e.touches[0];
-      const touchInfo = {
-        touchesCount: e.touches.length,
-        clientX: touch?.clientX || "N/A",
-        clientY: touch?.clientY || "N/A",
-        targetTag: (e.target as HTMLElement)?.tagName,
-        pointerEvents: window.getComputedStyle(input).pointerEvents,
-        zIndex: window.getComputedStyle(input).zIndex,
-      };
-
-      updateDebugInfo(`터치 정보: ${JSON.stringify(touchInfo)}`);
-
-      // 터치 후 포커스 시도
-      input.focus();
-
-      // iOS 특별 처리
-      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-        input.setSelectionRange(input.value.length, input.value.length);
-      }
-    } catch (error) {
-      updateDebugInfo(`터치 에러: ${error}`);
-    }
-
-    // 300ms 후 터치 플래그 리셋 (클릭 이벤트 중복 방지)
+    // 터치 후 300ms 동안 클릭 이벤트 무시
     setTimeout(() => {
       touchStarted.current = false;
+      addDebugLog("터치 플래그 리셋");
     }, 300);
   };
 
-  // 입력창 클릭 핸들러
+  // 클릭 핸들러 - 단순화
   const handleInputClick = (e: React.MouseEvent) => {
-    // 터치 이벤트 후 발생한 클릭이면 무시
     if (touchStarted.current) {
-      updateDebugInfo("클릭 무시됨 (터치 후 클릭)");
+      addDebugLog("🚫 클릭 무시 (터치 중)");
       return;
     }
 
     e.preventDefault();
     e.stopPropagation();
-    updateDebugInfo("클릭 이벤트 발생");
+    addDebugLog("🖱️ 클릭 발생");
 
     const input = inputRef.current;
+    if (input) {
+      addDebugLog("포커스 시도...");
+      input.focus();
+    }
+  };
+
+  // 수동 포커스 버튼
+  const handleManualFocus = () => {
+    const input = inputRef.current;
     if (!input) {
-      updateDebugInfo("클릭: 입력창 참조 없음");
+      addDebugLog("❌ 입력창 참조 없음");
       return;
     }
 
+    addDebugLog("🔘 수동 포커스 시도");
     try {
-      // 클릭 디버깅 정보
-      const clickInfo = {
-        readOnly: input.readOnly,
-        disabled: input.disabled,
-        focused: document.activeElement === input,
-        activeElement: document.activeElement?.tagName,
-        pointerEvents: window.getComputedStyle(input).pointerEvents,
-        display: window.getComputedStyle(input).display,
-        visibility: window.getComputedStyle(input).visibility,
-        userAgent: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent)
-          ? "Mobile"
-          : "Desktop",
-      };
-
-      updateDebugInfo(`클릭 정보: ${JSON.stringify(clickInfo, null, 1)}`);
-
-      // 강제 포커스 시도
       input.focus();
 
-      // iOS 특별 처리
-      if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-        input.setSelectionRange(input.value.length, input.value.length);
+      // 강제 키보드 활성화 시도
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        input.click();
+        input.setSelectionRange(0, input.value.length);
+        addDebugLog("📱 모바일 키보드 활성화 시도");
       }
     } catch (error) {
-      updateDebugInfo(`클릭 에러: ${error}`);
+      addDebugLog(`❌ 포커스 에러: ${error}`);
     }
   };
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      {/* 디버깅 정보 표시 */}
-      {debugInfo && (
-        <div
-          style={{
-            fontSize: 10,
-            background: "#f0f0f0",
-            padding: 4,
-            borderRadius: 4,
-            wordBreak: "break-all",
-            maxHeight: 100,
-            overflow: "auto",
-          }}
-        >
-          {debugInfo}
-        </div>
-      )}
+      {/* 디버깅 로그 표시 - 여러 줄 */}
+      <div
+        style={{
+          fontSize: 11,
+          background: "#f5f5f5",
+          padding: 8,
+          borderRadius: 4,
+          fontFamily: "monospace",
+          maxHeight: 120,
+          overflow: "auto",
+          border: "1px solid #ddd",
+        }}
+      >
+        {debugLog.length === 0
+          ? "로그 대기중..."
+          : debugLog.map((log, idx) => (
+              <div key={idx} style={{ marginBottom: 2 }}>
+                {log}
+              </div>
+            ))}
+      </div>
+
+      {/* 수동 포커스 버튼 */}
+      <button
+        onClick={handleManualFocus}
+        style={{
+          padding: "8px 12px",
+          fontSize: 12,
+          borderRadius: 6,
+          border: "2px solid #007AFF",
+          background: "#E3F2FD",
+          color: "#007AFF",
+          fontWeight: "bold",
+        }}
+      >
+        🔘 수동으로 입력창 활성화
+      </button>
 
       <input
         ref={inputRef}
@@ -244,44 +217,35 @@ const YoutubePanel = ({
         onChange={(e) => setQuery(e.target.value)}
         onClick={handleInputClick}
         onTouchStart={handleInputTouch}
-        onFocus={() => updateDebugInfo("포커스 획득 ✓")}
-        onBlur={() => updateDebugInfo("포커스 잃음")}
+        onFocus={() => addDebugLog("✅ 포커스 획득!")}
+        onBlur={() => addDebugLog("❌ 포커스 잃음")}
         onPaste={(e) => {
-          console.log("[PASTE] text = ", e.clipboardData?.getData("text"));
-          updateDebugInfo("붙여넣기 이벤트");
-          // 안전망: 외부 로직이 값을 비워도 우리가 직접 반영
+          addDebugLog("📋 붙여넣기");
           const text = e.clipboardData?.getData("text") ?? "";
           if (text) {
             e.preventDefault();
             setQuery((prev) => prev + text);
           }
         }}
-        onInput={() => updateDebugInfo("입력 중...")}
-        onKeyDown={(e) => updateDebugInfo(`키 입력: ${e.key}`)}
+        onInput={() => addDebugLog("⌨️ 입력 중")}
+        onKeyDown={(e) => addDebugLog(`🔤 키: ${e.key}`)}
         placeholder="예) https://youtu.be/abcdEFG1234"
         style={{
-          padding: "12px 15px", // 패딩 증가
-          fontSize: 16, // iOS 자동줌 방지
+          padding: "15px 18px", // 더 큰 터치 영역
+          fontSize: 16,
           borderRadius: 8,
-          border: "2px solid #ddd", // 테두리 두껍게
+          border: "2px solid #007AFF",
+          outline: "none",
           WebkitAppearance: "none",
           appearance: "none",
-          // 추가 모바일 스타일
+          // 모바일 최적화
+          touchAction: "manipulation",
+          WebkitTapHighlightColor: "transparent",
           WebkitUserSelect: "text",
           userSelect: "text",
-          // 중요: 터치 이벤트 허용
-          touchAction: "manipulation",
-          WebkitTapHighlightColor: "rgba(0,0,0,0.1)",
-          // 포인터 이벤트 확실히 허용
-          pointerEvents: "auto",
-          // 모바일에서 입력창이 제대로 작동하도록
+          // 추가 모바일 스타일
           WebkitTouchCallout: "default",
-          WebkitUserModify: "read-write",
-          // z-index 추가
-          position: "relative",
-          zIndex: 1000,
         }}
-        // 추가 속성들
         autoComplete="off"
         spellCheck="false"
         autoCapitalize="off"
@@ -304,34 +268,43 @@ const YoutubePanel = ({
         선택
       </button>
 
-      {/* 디버깅용 버튼 */}
+      {/* 디버깅용 정보 버튼 */}
       <button
         onClick={() => {
           const input = inputRef.current;
           if (input) {
             const rect = input.getBoundingClientRect();
+            const computedStyle = window.getComputedStyle(input);
             const info = `
-              입력창 위치: ${rect.top}, ${rect.left}
-              크기: ${rect.width}x${rect.height}
-              화면 내 위치: ${rect.top > 0 && rect.bottom < window.innerHeight}
-              활성 요소: ${document.activeElement?.tagName}
-              키보드 높이 추정: ${
-                window.innerHeight -
+📍 입력창 위치: ${Math.round(rect.top)}, ${Math.round(rect.left)}
+📏 크기: ${Math.round(rect.width)} × ${Math.round(rect.height)}
+👁️ 화면 내: ${rect.top >= 0 && rect.bottom <= window.innerHeight}
+🎯 활성 요소: ${document.activeElement?.tagName || "NONE"}
+⌨️ 키보드 추정: ${Math.max(
+              0,
+              window.innerHeight -
                 (window.visualViewport?.height || window.innerHeight)
-              }
-            `;
+            )}px
+🖱️ 포인터: ${computedStyle.pointerEvents}
+🔢 z-index: ${computedStyle.zIndex}
+📱 UA: ${
+              /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+                ? "Mobile"
+                : "Desktop"
+            }
+            `.trim();
             alert(info);
           }
         }}
         style={{
-          padding: "8px 12px",
-          fontSize: 12,
-          borderRadius: 6,
+          padding: "6px 10px",
+          fontSize: 11,
+          borderRadius: 4,
           border: "1px solid #ccc",
           background: "#f9f9f9",
         }}
       >
-        디버그 정보
+        🔍 상세 정보
       </button>
     </div>
   );
