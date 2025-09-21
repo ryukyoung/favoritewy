@@ -93,14 +93,11 @@ const DirectYoutubeInput = ({
 
   // 기존 값이 YouTube 썸네일 URL인지 확인하여 초기값 설정
   useEffect(() => {
-    if (typeof value === "string" && value.includes("ytimg.com")) {
-      // YouTube 썸네일이 있으면 "YouTube 영상 선택됨"으로 표시
-      setQuery("");
-    } else if (typeof value === "string" && value) {
-      // YouTube URL이나 다른 문자열이면 그대로 표시
+    // 처음에만 원본 텍스트를 주입하고, 썸네일(ytimg)은 건드리지 않음
+    if (typeof value === "string" && value && !value.includes("ytimg.com")) {
       setQuery(value);
     }
-  }, [value]);
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -119,10 +116,6 @@ const DirectYoutubeInput = ({
     // 패널을 자동으로 닫고 싶다면:
     // onHide?.();
   };
-  // 현재 상태 표시
-  const hasYoutubeThumbnail =
-    typeof value === "string" && value.includes("ytimg.com");
-  const displayValue = hasYoutubeThumbnail ? "" : query;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -130,7 +123,7 @@ const DirectYoutubeInput = ({
         <input
           ref={inputRef}
           type="text"
-          value={displayValue}
+          value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={(e) => handleBlur(e.currentTarget.value)}
