@@ -124,11 +124,6 @@ const DirectYoutubeInput = ({
     }
   };
 
-  const clearInput = () => {
-    setQuery("");
-    onChange("");
-  };
-
   // 현재 상태 표시
   const hasYoutubeThumbnail =
     typeof value === "string" && value.includes("ytimg.com");
@@ -136,22 +131,6 @@ const DirectYoutubeInput = ({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {hasYoutubeThumbnail && (
-        <div
-          style={{
-            padding: "6px 10px",
-            backgroundColor: "#f0f8ff",
-            borderRadius: 6,
-            fontSize: 12,
-            color: "#0066cc",
-            border: "1px solid #cce7ff",
-            textAlign: "center",
-          }}
-        >
-          YouTube 영상 선택됨
-        </div>
-      )}
-
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <input
           ref={inputRef}
@@ -159,13 +138,14 @@ const DirectYoutubeInput = ({
           value={displayValue}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="YouTube URL"
+          onClick={applyYoutubeUrl}
+          placeholder="https://youtu.be/wY4IVba83bo1"
           style={{
             flex: 1,
-            padding: "8px 10px",
-            fontSize: 14, // 크기 줄임
-            border: "1px solid #ddd",
+            padding: "0px 0px",
+            border: "1px solid #e9e9e9",
             borderRadius: 6,
+            fontSize: 14, // 크기 줄임
             outline: "none",
             minWidth: 0, // flex 축소 허용
           }}
@@ -174,39 +154,6 @@ const DirectYoutubeInput = ({
           autoCapitalize="off"
           spellCheck="false"
         />
-        {(query.trim() || hasYoutubeThumbnail) && (
-          <button
-            onClick={clearInput}
-            style={{
-              padding: "8px 10px",
-              fontSize: 12,
-              borderRadius: 6,
-              border: "1px solid #ddd",
-              background: "#fff",
-              color: "#666",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            지우기
-          </button>
-        )}
-        <button
-          onClick={applyYoutubeUrl}
-          disabled={!query.trim()}
-          style={{
-            padding: "8px 10px",
-            fontSize: 12,
-            borderRadius: 6,
-            border: "1px solid #ddd",
-            background: query.trim() ? "#ff7ed0" : "#f5f5f5",
-            color: query.trim() ? "#fff" : "#999",
-            cursor: query.trim() ? "pointer" : "not-allowed",
-            whiteSpace: "nowrap",
-          }}
-        >
-          적용
-        </button>
       </div>
     </div>
   );
@@ -442,6 +389,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
         border: "1px solid #e9e9e9",
         borderRadius: 12,
         position: "relative",
+        overflow: "hidden",
       }}
     >
       <button

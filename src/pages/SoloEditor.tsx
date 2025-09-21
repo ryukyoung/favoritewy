@@ -551,6 +551,7 @@ export default function SoloEditor() {
                   whiteSpace: "pre-line",
                   overflow: "hidden",
                   color: "#000",
+                  borderRadius: 0,
                 }}
                 title={cfg.title}
               >
