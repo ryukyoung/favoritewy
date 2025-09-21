@@ -19,7 +19,7 @@ export default function CollageBoard({
   cell,
   gap,
   margins = { top: 0, bottom: 0, left: 0, right: 0 },
-  imgCols = 10,
+  imgCols = 11,
   boardWidth,
   boardHeight,
   bgKey = "bg1", // ✅ 기본값

@@ -15,7 +15,7 @@ type Props = {
   bgKey?: "bg1" | "bg2";
 };
 
-const PATTERN = [4, 4, 2]; // 4 / 4 / 2 고정
+const PATTERN = [4, 4, 3]; // 4 / 4 / 2 고정
 const MAX_COLS = 4; // 가장 긴 줄의 칸수
 
 export default function CollageBoardSingle({

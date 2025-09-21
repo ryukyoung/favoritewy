@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import imageCompression from "browser-image-compression";
 
 // Solo 전용: 총 10칸
-const SOLO_COLS = 10;
+const SOLO_COLS = 11;
 const CELL = 160;
 const GAP = 40;
 const LEFT_SIDE = 60;
@@ -485,7 +485,7 @@ export default function SoloEditor() {
 
       // 이미지 셀들 그리기
       const promises = [];
-      for (let k = 0; k < Math.min(10, images.length); k++) {
+      for (let k = 0; k < Math.min(11, images.length); k++) {
         const imageValue = images[k];
         const { wr, wc } = idxToWrap(k);
         const cellX = LEFT_SIDE + wc * (CELL + GAP);
@@ -551,7 +551,6 @@ export default function SoloEditor() {
                   whiteSpace: "pre-line",
                   overflow: "hidden",
                   color: "#000",
-                  borderRadius: 0,
                 }}
                 title={cfg.title}
               >

@@ -116,6 +116,18 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
     allowUpload: true,
   },
   {
+    title: "라이브방송",
+    mode: "preset+upload",
+    allowUpload: true,
+    presets: [
+      { label: "241011", url: "../assets/live/y1.png" },
+      { label: "241025", url: "../assets/live/bb1.png" },
+      { label: "250614", url: "../assets/live/b1.png" },
+      { label: "250726", url: "../assets/live/b2.png" },
+      { label: "250921", url: "../assets/live/b3.png" },
+    ],
+  },
+  {
     title: "케미",
     mode: "preset+upload",
     allowUpload: true,
