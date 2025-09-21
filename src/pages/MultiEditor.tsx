@@ -21,7 +21,6 @@ import {
   collection,
   getDoc,
   runTransaction,
-  updateDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ensureSignedIn } from "../lib/firebase";
