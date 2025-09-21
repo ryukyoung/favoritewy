@@ -201,7 +201,11 @@ export default function MultiEditor() {
   const [countField, setCountField] = useState("2");
   const [bgKey, setBgKey] = useState<"bg1" | "bg2">("bg1");
   const [previewScale, setPreviewScale] = useState(1);
-  const [dirty, setDirty] = useState(false); // 서버에 저장 필요 여부
+
+  // 멤버별 dirty 상태 추가
+  const [memberDirty, setMemberDirty] = useState<boolean[]>(
+    Array(2).fill(false)
+  );
 
   // 자동 저장 사용 여부(디바운스). 기본 false.
   const ENABLE_AUTO_SAVE = false;
@@ -223,6 +227,18 @@ export default function MultiEditor() {
 
   // refs
   const previewWrapRef = useRef<HTMLDivElement>(null);
+
+  // 멤버별 dirty 상태 업데이트 함수
+  const setMemberDirtyState = useCallback(
+    (memberIndex: number, isDirty: boolean) => {
+      setMemberDirty((prev) => {
+        const next = [...prev];
+        next[memberIndex] = isDirty;
+        return next;
+      });
+    },
+    []
+  );
 
   // /multi 로 들어온 경우: 방 자동 생성 → 이동
   useEffect(() => {
@@ -263,7 +279,7 @@ export default function MultiEditor() {
       setParticipants(base);
       setCount(base.length);
       setCountField(String(base.length));
-      setDirty(false);
+      setMemberDirty(Array(base.length).fill(false));
       return;
     }
 
@@ -281,7 +297,7 @@ export default function MultiEditor() {
     setParticipants(normalized);
     setCount(serverCount);
     setCountField(String(serverCount));
-    setDirty(false);
+    setMemberDirty(Array(serverCount).fill(false));
   }, [roomRef]);
 
   // 마운트/roomId 바뀔 때 한 번만 로드 (실시간 구독 없음)
@@ -295,7 +311,14 @@ export default function MultiEditor() {
     setCount(c);
     setCountField(String(c));
     setParticipants((prev) => normalizeParticipants(prev, c));
-    setDirty(true);
+    setMemberDirty((prev) => {
+      const next = Array(c).fill(false);
+      // 기존 dirty 상태 유지 (범위 내에서)
+      for (let i = 0; i < Math.min(prev.length, c); i++) {
+        next[i] = prev[i] || false;
+      }
+      return next;
+    });
   }, []);
 
   // 입력 확정 처리 (Enter/blur)
@@ -309,14 +332,17 @@ export default function MultiEditor() {
   }, [countField, count, onChangeCount]);
 
   // 닉네임 변경 (로컬 상태만)
-  const updateNickname = useCallback((idx: number, name: string) => {
-    setParticipants((prev) => {
-      const next = [...prev];
-      next[idx] = { ...next[idx], nickname: name };
-      return next;
-    });
-    setDirty(true);
-  }, []);
+  const updateNickname = useCallback(
+    (idx: number, name: string) => {
+      setParticipants((prev) => {
+        const next = [...prev];
+        next[idx] = { ...next[idx], nickname: name };
+        return next;
+      });
+      setMemberDirtyState(idx, true);
+    },
+    [setMemberDirtyState]
+  );
 
   // 이미지 변경 (로컬 상태만; File은 저장 시 업로드)
   const updateImage = useCallback(
@@ -328,10 +354,96 @@ export default function MultiEditor() {
         next[idx] = { ...next[idx], images: imgs };
         return next;
       });
-      setDirty(true);
+      setMemberDirtyState(idx, true);
     },
-    []
+    [setMemberDirtyState]
   );
+
+  // 개별 멤버 저장 함수
+  const handleSaveMemberToServer = useCallback(
+    async (memberIndex: number) => {
+      if (!roomRef || !roomId || memberIndex >= participants.length) return;
+      await ensureSignedIn();
+
+      try {
+        const participant = participants[memberIndex];
+
+        // 해당 멤버의 File 이미지들을 Storage에 업로드
+        const newImages = await Promise.all(
+          (participant.images || []).map(async (v, j) => {
+            if (v instanceof File) {
+              const key = `${roomId}/${memberIndex}-${j}-${Date.now()}-${
+                v.name
+              }`;
+              const url = await uploadImageAndGetUrl(v, key);
+              return url;
+            }
+            return v;
+          })
+        );
+
+        const updatedParticipant = {
+          ...participant,
+          images: newImages,
+        };
+
+        // Firestore에서 해당 멤버만 업데이트
+        await updateDoc(roomRef, {
+          [`participants.${memberIndex}`]: updatedParticipant,
+          updatedAt: serverTimestamp(),
+        });
+
+        // 로컬 상태에서 해당 멤버의 이미지를 URL로 업데이트
+        setParticipants((prev) => {
+          const next = [...prev];
+          next[memberIndex] = {
+            ...next[memberIndex],
+            images: newImages,
+          };
+          return next;
+        });
+
+        // 해당 멤버의 dirty 상태 해제
+        setMemberDirtyState(memberIndex, false);
+
+        alert(`${memberIndex + 1}번 멤버 저장 완료!`);
+      } catch (e) {
+        console.error(e);
+        alert(
+          `${memberIndex + 1}번 멤버 저장 실패. 네트워크/권한을 확인해 주세요.`
+        );
+      }
+    },
+    [roomRef, roomId, participants, setMemberDirtyState]
+  );
+
+  // 전체 저장 함수 (변경된 멤버들만)
+  const handleSaveAllToServer = useCallback(async () => {
+    if (!roomRef || !roomId) return;
+    await ensureSignedIn();
+
+    try {
+      // dirty한 멤버들만 처리
+      const dirtyIndexes = memberDirty
+        .map((dirty, index) => (dirty ? index : -1))
+        .filter((index) => index >= 0);
+
+      if (dirtyIndexes.length === 0) {
+        alert("저장할 변경사항이 없습니다.");
+        return;
+      }
+
+      // 각 dirty 멤버별로 순차 저장
+      for (const memberIndex of dirtyIndexes) {
+        await handleSaveMemberToServer(memberIndex);
+      }
+
+      alert(`${dirtyIndexes.length}명의 멤버 저장 완료!`);
+    } catch (e) {
+      console.error(e);
+      alert("일부 멤버 저장 실패.");
+    }
+  }, [roomRef, roomId, memberDirty, handleSaveMemberToServer]);
 
   // 이미지 로드 에러 로그(진단용)
   useEffect(() => {
@@ -383,71 +495,27 @@ export default function MultiEditor() {
     debouncedCommitCount(countField);
   }, [countField, debouncedCommitCount]);
 
-  // 서버에 저장 (이때만 업로드/Firestore 반영)
-  const handleSaveToServer = useCallback(async () => {
-    if (!roomRef || !roomId) return;
-    await ensureSignedIn();
-
-    try {
-      // 모든 File → Storage 업로드 후 URL 치환
-      const newParticipants = await Promise.all(
-        participants.slice(0, count).map(async (p, i) => {
-          const newImages = await Promise.all(
-            (p.images || []).map(async (v, j) => {
-              if (v instanceof File) {
-                const key = `${roomId}/${i}-${j}-${Date.now()}-${v.name}`;
-                const url = await uploadImageAndGetUrl(v, key);
-                return url;
-              }
-              return v;
-            })
-          );
-          return { ...p, images: newImages };
-        })
-      );
-
-      await updateDoc(roomRef, {
-        participants: newParticipants,
-        count,
-        updatedAt: serverTimestamp(),
-      });
-
-      // 로컬에도 URL 반영
-      setParticipants((prev) => {
-        const next = [...prev];
-        for (let i = 0; i < count; i++) {
-          next[i] = { ...next[i], images: newParticipants[i].images };
-        }
-        return next;
-      });
-
-      setDirty(false);
-    } catch (e) {
-      console.error(e);
-      alert("서버 저장 실패. 네트워크/권한을 확인해 주세요.");
-    }
-  }, [roomRef, roomId, participants, count]);
-
-  /* =============================
-     (옵션) 디바운스 자동 저장
-     - 기본 비활성화.
-     - ENABLE_AUTO_SAVE 를 true 로 바꾸면,
-       participants/count/bgKey 변경 후 600ms 지나면 자동 저장.
-  ============================= */
-  const debouncedAutoSave = useDebouncedCallback(
-    () => {
-      if (dirty) {
-        handleSaveToServer();
+  // 멤버별 자동저장 (옵션)
+  const debouncedAutoSaveMember = useDebouncedCallback(
+    (memberIndex: number) => {
+      if (memberDirty[memberIndex]) {
+        handleSaveMemberToServer(memberIndex);
       }
     },
     600,
-    [dirty, handleSaveToServer]
+    [memberDirty, handleSaveMemberToServer]
   );
 
+  // 각 멤버별 자동저장 트리거
   useEffect(() => {
     if (!ENABLE_AUTO_SAVE) return;
-    debouncedAutoSave();
-  }, [participants, count, bgKey, debouncedAutoSave, ENABLE_AUTO_SAVE]);
+
+    memberDirty.forEach((dirty, index) => {
+      if (dirty) {
+        debouncedAutoSaveMember(index);
+      }
+    });
+  }, [memberDirty, debouncedAutoSaveMember, ENABLE_AUTO_SAVE]);
 
   // Canvas PNG 저장 함수 (기존 그대로)
   const handleSave = useCallback(async () => {
@@ -794,24 +862,52 @@ export default function MultiEditor() {
                   alignItems: "center",
                   gap: 8,
                   marginBottom: 20,
+                  justifyContent: "space-between",
                 }}
               >
-                <strong style={{ width: 48, fontSize: 18, color: "#000" }}>
-                  {i + 1}번
-                </strong>
-                <input
-                  value={p.nickname}
-                  onChange={(e) => updateNickname(i, e.target.value)}
-                  placeholder="닉네임"
+                <div
                   style={{
-                    padding: "12px 14px",
-                    fontSize: 16,
-                    borderRadius: 10,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
                     flex: 1,
-                    border: "none",
-                    backgroundColor: "#f6f6f6",
                   }}
-                />
+                >
+                  <strong style={{ width: 48, fontSize: 18, color: "#000" }}>
+                    {i + 1}번
+                  </strong>
+                  <input
+                    value={p.nickname}
+                    onChange={(e) => updateNickname(i, e.target.value)}
+                    placeholder="닉네임"
+                    style={{
+                      padding: "12px 14px",
+                      fontSize: 16,
+                      borderRadius: 10,
+                      flex: 1,
+                      border: "none",
+                      backgroundColor: "#f6f6f6",
+                    }}
+                  />
+                </div>
+
+                {/* 개별 저장 버튼 */}
+                <button
+                  onClick={() => handleSaveMemberToServer(i)}
+                  disabled={!memberDirty[i]}
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: 14,
+                    borderRadius: 8,
+                    border: "1px solid #ddd",
+                    background: memberDirty[i] ? "#4f46e5" : "#9ca3af",
+                    color: "#fff",
+                    cursor: memberDirty[i] ? "pointer" : "not-allowed",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {memberDirty[i] ? "저장" : "저장됨"}
+                </button>
               </div>
 
               <div
@@ -858,25 +954,32 @@ export default function MultiEditor() {
           ))}
         </div>
       </section>
+
+      {/* 변경된 멤버들 일괄 저장 버튼 */}
       <div style={{ display: "flex", justifyContent: "end", marginTop: 16 }}>
         <button
-          onClick={handleSaveToServer}
-          disabled={!dirty}
+          onClick={handleSaveAllToServer}
+          disabled={!memberDirty.some((dirty) => dirty)}
           style={{
-            padding: "12px 12px", // ✅ 작게
-            fontSize: 16, // ✅ 작게
+            padding: "12px 12px",
+            fontSize: 16,
             lineHeight: 1,
             borderRadius: 8,
-            background: dirty ? "#4f46e5" : "#9ca3af",
+            background: memberDirty.some((dirty) => dirty)
+              ? "#4f46e5"
+              : "#9ca3af",
             color: "#fff",
             fontWeight: 500,
-            cursor: dirty ? "pointer" : "not-allowed",
+            cursor: memberDirty.some((dirty) => dirty)
+              ? "pointer"
+              : "not-allowed",
             border: "1px solid #ddd",
           }}
         >
-          서버에 저장
+          변경된 멤버들 저장 ({memberDirty.filter(Boolean).length}명)
         </button>
       </div>
+
       {/* 배경 선택 */}
       <div
         style={{
@@ -907,7 +1010,6 @@ export default function MultiEditor() {
               type="button"
               onClick={() => {
                 setBgKey(key);
-                setDirty(true);
               }}
               aria-pressed={bgKey === key}
               style={{
@@ -987,7 +1089,7 @@ export default function MultiEditor() {
         </div>
       </section>
 
-      {/* 저장 버튼들 */}
+      {/* PNG 저장 버튼 */}
       <div style={{ marginTop: 20, display: "grid", gap: 8 }}>
         <button
           onClick={handleSave}

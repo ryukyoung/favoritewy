@@ -64,7 +64,7 @@ export default function Home() {
       >
         <div
           style={{
-            fontSize: 49,
+            fontSize: 44,
             fontWeight: 700,
             lineHeight: 0.9,
             marginBottom: 45,
