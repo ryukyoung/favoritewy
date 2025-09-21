@@ -20,44 +20,10 @@ import {
   updateDoc,
   serverTimestamp,
   collection,
-  getDoc,
+  onSnapshot,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ensureSignedIn } from "../lib/firebase";
-
-/* =============================
-   디바운스 훅
-============================= */
-function useDebouncedCallback<T extends (...args: any[]) => any>(
-  fn: T,
-  delay: number,
-  deps: any[] = []
-) {
-  const fnRef = useRef(fn);
-  useEffect(() => {
-    fnRef.current = fn;
-  }, [fn]);
-
-  const timerRef = useRef<number | null>(null);
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(
-    () =>
-      (...args: Parameters<T>) => {
-        if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = window.setTimeout(
-          () => fnRef.current(...args),
-          delay
-        );
-      },
-    [delay, ...deps]
-  );
-}
 
 const IMG_COLS = COLUMN_CONFIGS.length;
 const GRID_ROWS = 4;
@@ -162,31 +128,23 @@ const makeEmptyParticipant = (): Participant => ({
   images: Array(IMG_COLS).fill(null),
 });
 
-const normalizeImages = (arr: Array<File | string | null> | undefined) => {
-  const base = Array.isArray(arr) ? [...arr] : [];
-  const out = Array(IMG_COLS).fill(null) as (File | string | null)[];
-  for (let i = 0; i < IMG_COLS; i++) out[i] = base[i] ?? null;
-  return out;
-};
+// Firebase 업데이트 헬퍼
+const updateFirestore = async (
+  roomRef: any,
+  data: any,
+  errorMessage: string
+) => {
+  if (!roomRef) return;
 
-const normalizeParticipants = (
-  p: Participant[] | undefined,
-  count: number
-): Participant[] => {
-  const base = Array.isArray(p) ? [...p] : [];
-  // 길이 보정
-  const wanted = clamp(count, 2, 10);
-  if (base.length < wanted) {
-    for (let i = base.length; i < wanted; i++)
-      base.push(makeEmptyParticipant());
-  } else if (base.length > wanted) {
-    base.length = wanted;
+  try {
+    await updateDoc(roomRef, {
+      ...data,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error(`${errorMessage}:`, e);
+    alert(`${errorMessage}. 권한/네트워크를 확인해 주세요.`);
   }
-  // 각 이미지 길이 보정
-  return base.map((pp) => ({
-    nickname: pp?.nickname ?? "",
-    images: normalizeImages(pp?.images),
-  }));
 };
 
 export default function MultiEditor() {
@@ -201,14 +159,6 @@ export default function MultiEditor() {
   const [countField, setCountField] = useState("2");
   const [bgKey, setBgKey] = useState<"bg1" | "bg2">("bg1");
   const [previewScale, setPreviewScale] = useState(1);
-
-  // 멤버별 dirty 상태 추가
-  const [memberDirty, setMemberDirty] = useState<boolean[]>(
-    Array(2).fill(false)
-  );
-
-  // 자동 저장 사용 여부(디바운스). 기본 false.
-  const ENABLE_AUTO_SAVE = false;
 
   const titles = DEFAULT_TITLES;
   const selectedBgUrl = bgKey === "bg1" ? BG1 : BG2;
@@ -227,18 +177,6 @@ export default function MultiEditor() {
 
   // refs
   const previewWrapRef = useRef<HTMLDivElement>(null);
-
-  // 멤버별 dirty 상태 업데이트 함수
-  const setMemberDirtyState = useCallback(
-    (memberIndex: number, isDirty: boolean) => {
-      setMemberDirty((prev) => {
-        const next = [...prev];
-        next[memberIndex] = isDirty;
-        return next;
-      });
-    },
-    []
-  );
 
   // /multi 로 들어온 경우: 방 자동 생성 → 이동
   useEffect(() => {
@@ -260,68 +198,101 @@ export default function MultiEditor() {
     createRoom().catch(console.error);
   }, [roomId, nav]);
 
-  // 서버에서 단발 로드
-  const fetchRoom = useCallback(async () => {
+  // 서버 상태 실시간 구독
+  useEffect(() => {
     if (!roomRef) return;
-    await ensureSignedIn();
 
-    const snap = await getDoc(roomRef);
-    if (!snap.exists()) {
-      // 없으면 최소 문서 생성
-      const base = [makeEmptyParticipant(), makeEmptyParticipant()];
-      await setDoc(roomRef, {
-        titles: DEFAULT_TITLES,
-        participants: base,
-        count: base.length,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      setParticipants(base);
-      setCount(base.length);
-      setCountField(String(base.length));
-      setMemberDirty(Array(base.length).fill(false));
-      return;
-    }
+    let initializing = true;
 
-    const data = snap.data() as any;
-    const serverCount = clamp(
-      typeof data?.count === "number"
-        ? data.count
-        : data?.participants?.length ?? 2,
-      2,
-      10
-    );
+    const unsub = onSnapshot(roomRef, async (snap) => {
+      // 로그인 보장
+      await ensureSignedIn();
 
-    const normalized = normalizeParticipants(data?.participants, serverCount);
+      if (!snap.exists()) {
+        const base: Participant[] = [
+          makeEmptyParticipant(),
+          makeEmptyParticipant(),
+        ];
+        await setDoc(roomRef, {
+          titles: DEFAULT_TITLES,
+          participants: base,
+          count: base.length,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        return;
+      }
 
-    setParticipants(normalized);
-    setCount(serverCount);
-    setCountField(String(serverCount));
-    setMemberDirty(Array(serverCount).fill(false));
+      const data = snap.data();
+      let p: Participant[] = Array.isArray(data?.participants)
+        ? [...data.participants]
+        : [];
+
+      // 최소 2명 보장
+      if (p.length < 2) {
+        for (let i = p.length; i < 2; i++) {
+          p.push(makeEmptyParticipant());
+        }
+        await updateFirestore(
+          roomRef,
+          { participants: p },
+          "참가자 초기화 실패"
+        );
+      }
+
+      // 인원수 유효성 검사
+      const c = clamp(
+        typeof data?.count === "number" ? data.count : p.length || 2,
+        2,
+        10
+      );
+
+      if (data?.count !== c) {
+        await updateFirestore(roomRef, { count: c }, "인원수 수정 실패");
+      }
+
+      setParticipants(p);
+      setCount(c);
+
+      if (initializing) {
+        setCountField(String(c));
+        initializing = false;
+      }
+    });
+
+    return unsub;
   }, [roomRef]);
 
-  // 마운트/roomId 바뀔 때 한 번만 로드 (실시간 구독 없음)
-  useEffect(() => {
-    fetchRoom().catch(console.error);
-  }, [fetchRoom]);
+  // 인원 변경
+  const onChangeCount = useCallback(
+    (n: number) => {
+      const c = clamp(Math.floor(n) || 2, 2, 10);
+      setCount(c);
+      setCountField(String(c));
 
-  // 인원 변경 (로컬 상태만)
-  const onChangeCount = useCallback((n: number) => {
-    const c = clamp(Math.floor(n) || 2, 2, 10);
-    setCount(c);
-    setCountField(String(c));
-    setParticipants((prev) => normalizeParticipants(prev, c));
-    setMemberDirty((prev) => {
-      const next = Array(c).fill(false);
-      // 기존 dirty 상태 유지 (범위 내에서)
-      for (let i = 0; i < Math.min(prev.length, c); i++) {
-        next[i] = prev[i] || false;
-      }
-      return next;
-    });
-  }, []);
+      setParticipants((prev) => {
+        const next = [...prev];
+        if (next.length < c) {
+          while (next.length < c) {
+            next.push(makeEmptyParticipant());
+          }
+        } else if (next.length > c) {
+          next.length = c;
+        }
 
-  // 입력 확정 처리 (Enter/blur)
+        updateFirestore(
+          roomRef,
+          { participants: next, count: c },
+          "인원 수 저장 실패"
+        );
+
+        return next;
+      });
+    },
+    [roomRef]
+  );
+
+  // 입력 확정 처리
   const commitCountFromField = useCallback(() => {
     const n = parseInt(countField, 10);
     if (Number.isNaN(n)) {
@@ -331,121 +302,77 @@ export default function MultiEditor() {
     onChangeCount(clamp(n, 2, 10));
   }, [countField, count, onChangeCount]);
 
-  // 닉네임 변경 (로컬 상태만)
+  // 닉네임 변경
   const updateNickname = useCallback(
     (idx: number, name: string) => {
       setParticipants((prev) => {
         const next = [...prev];
         next[idx] = { ...next[idx], nickname: name };
+
+        updateFirestore(roomRef, { participants: next }, "닉네임 저장 실패");
+
         return next;
       });
-      setMemberDirtyState(idx, true);
     },
-    [setMemberDirtyState]
+    [roomRef]
   );
 
-  // 이미지 변경 (로컬 상태만; File은 저장 시 업로드)
+  // 이미지 업데이트
   const updateImage = useCallback(
     (idx: number, imgIdx: number, v: File | string | null) => {
       setParticipants((prev) => {
         const next = [...prev];
-        const imgs = normalizeImages(next[idx]?.images);
-        imgs[imgIdx] = v;
-        next[idx] = { ...next[idx], images: imgs };
+        const imgs = [...(next[idx].images || [])];
+
+        if (v instanceof File) {
+          // 임시 URL로 즉시 표시
+          const tempUrl = URL.createObjectURL(v);
+          imgs[imgIdx] = tempUrl;
+          next[idx] = { ...next[idx], images: imgs };
+
+          // Firebase 업로드
+          if (roomId) {
+            const key = `${roomId}/${idx}-${imgIdx}-${Date.now()}-${v.name}`;
+            uploadImageAndGetUrl(v, key)
+              .then((url) => {
+                setParticipants((curr) => {
+                  const n2 = [...curr];
+                  const i2 = [...(n2[idx].images || [])];
+                  i2[imgIdx] = url;
+                  n2[idx] = { ...n2[idx], images: i2 };
+                  console.log("saved url:", url);
+
+                  updateFirestore(
+                    roomRef,
+                    { participants: n2 },
+                    "업로드 URL 저장 실패"
+                  );
+
+                  return n2;
+                });
+
+                // 임시 URL 정리
+                URL.revokeObjectURL(tempUrl);
+              })
+              .catch((e) => {
+                console.error(e);
+                alert("이미지 업로드 실패");
+              });
+          }
+        } else {
+          imgs[imgIdx] = v;
+          next[idx] = { ...next[idx], images: imgs };
+
+          updateFirestore(roomRef, { participants: next }, "이미지 저장 실패");
+        }
+
         return next;
       });
-      setMemberDirtyState(idx, true);
     },
-    [setMemberDirtyState]
+    [roomRef, roomId]
   );
 
-  // 개별 멤버 저장 함수
-  const handleSaveMemberToServer = useCallback(
-    async (memberIndex: number) => {
-      if (!roomRef || !roomId || memberIndex >= participants.length) return;
-      await ensureSignedIn();
-
-      try {
-        const participant = participants[memberIndex];
-
-        // 해당 멤버의 File 이미지들을 Storage에 업로드
-        const newImages = await Promise.all(
-          (participant.images || []).map(async (v, j) => {
-            if (v instanceof File) {
-              const key = `${roomId}/${memberIndex}-${j}-${Date.now()}-${
-                v.name
-              }`;
-              const url = await uploadImageAndGetUrl(v, key);
-              return url;
-            }
-            return v;
-          })
-        );
-
-        const updatedParticipant = {
-          ...participant,
-          images: newImages,
-        };
-
-        // Firestore에서 해당 멤버만 업데이트
-        await updateDoc(roomRef, {
-          [`participants.${memberIndex}`]: updatedParticipant,
-          updatedAt: serverTimestamp(),
-        });
-
-        // 로컬 상태에서 해당 멤버의 이미지를 URL로 업데이트
-        setParticipants((prev) => {
-          const next = [...prev];
-          next[memberIndex] = {
-            ...next[memberIndex],
-            images: newImages,
-          };
-          return next;
-        });
-
-        // 해당 멤버의 dirty 상태 해제
-        setMemberDirtyState(memberIndex, false);
-
-        alert(`${memberIndex + 1}번 멤버 저장 완료!`);
-      } catch (e) {
-        console.error(e);
-        alert(
-          `${memberIndex + 1}번 멤버 저장 실패. 네트워크/권한을 확인해 주세요.`
-        );
-      }
-    },
-    [roomRef, roomId, participants, setMemberDirtyState]
-  );
-
-  // 전체 저장 함수 (변경된 멤버들만)
-  const handleSaveAllToServer = useCallback(async () => {
-    if (!roomRef || !roomId) return;
-    await ensureSignedIn();
-
-    try {
-      // dirty한 멤버들만 처리
-      const dirtyIndexes = memberDirty
-        .map((dirty, index) => (dirty ? index : -1))
-        .filter((index) => index >= 0);
-
-      if (dirtyIndexes.length === 0) {
-        alert("저장할 변경사항이 없습니다.");
-        return;
-      }
-
-      // 각 dirty 멤버별로 순차 저장
-      for (const memberIndex of dirtyIndexes) {
-        await handleSaveMemberToServer(memberIndex);
-      }
-
-      alert(`${dirtyIndexes.length}명의 멤버 저장 완료!`);
-    } catch (e) {
-      console.error(e);
-      alert("일부 멤버 저장 실패.");
-    }
-  }, [roomRef, roomId, memberDirty, handleSaveMemberToServer]);
-
-  // 이미지 로드 에러 로그(진단용)
+  // 이미지 로드 에러 로그
   useEffect(() => {
     const onImgError = (e: Event) => {
       const t = e.target as HTMLImageElement;
@@ -457,67 +384,23 @@ export default function MultiEditor() {
     return () => window.removeEventListener("error", onImgError, true);
   }, []);
 
-  /* =============================
-     디바운스: 리사이즈 스케일 재계산
-  ============================= */
-  const recomputeScale = useCallback(() => {
-    const wrap = previewWrapRef.current;
-    if (!wrap) return;
-    const available = wrap.clientWidth - 8;
-    const fit = available / BOARD_W;
-    setPreviewScale(Math.min(1, fit));
-  }, []);
-  const debouncedResize = useDebouncedCallback(recomputeScale, 150, [
-    recomputeScale,
-  ]);
-
+  // 미리보기 스케일 조정
   useLayoutEffect(() => {
-    recomputeScale(); // 초기 1회
-    window.addEventListener("resize", debouncedResize);
-    return () => window.removeEventListener("resize", debouncedResize);
-  }, [debouncedResize, recomputeScale, boardHeight]);
+    const handleResize = () => {
+      const wrap = previewWrapRef.current;
+      if (!wrap) return;
 
-  /* =============================
-     디바운스: 인원 수 입력 자동 확정
-     (타이핑 멈추면 400ms 뒤 onChangeCount)
-  ============================= */
-  const debouncedCommitCount = useDebouncedCallback(
-    (fieldValue: string) => {
-      const n = parseInt(fieldValue, 10);
-      if (!Number.isNaN(n)) onChangeCount(n);
-    },
-    400,
-    [onChangeCount]
-  );
+      const available = wrap.clientWidth - 8;
+      const fit = available / BOARD_W;
+      setPreviewScale(Math.min(1, fit));
+    };
 
-  useEffect(() => {
-    if (countField === "") return;
-    debouncedCommitCount(countField);
-  }, [countField, debouncedCommitCount]);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [boardHeight]);
 
-  // 멤버별 자동저장 (옵션)
-  const debouncedAutoSaveMember = useDebouncedCallback(
-    (memberIndex: number) => {
-      if (memberDirty[memberIndex]) {
-        handleSaveMemberToServer(memberIndex);
-      }
-    },
-    600,
-    [memberDirty, handleSaveMemberToServer]
-  );
-
-  // 각 멤버별 자동저장 트리거
-  useEffect(() => {
-    if (!ENABLE_AUTO_SAVE) return;
-
-    memberDirty.forEach((dirty, index) => {
-      if (dirty) {
-        debouncedAutoSaveMember(index);
-      }
-    });
-  }, [memberDirty, debouncedAutoSaveMember, ENABLE_AUTO_SAVE]);
-
-  // Canvas PNG 저장 함수 (기존 그대로)
+  // Canvas PNG 저장 함수
   const handleSave = useCallback(async () => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -604,7 +487,7 @@ export default function MultiEditor() {
           );
         }
 
-        // 이미지 셀들 그래픽
+        // 이미지 셀들 그리기
         for (let colIndex = 0; colIndex < IMG_COLS; colIndex++) {
           const imageValue = participant.images?.[colIndex];
           const cellX = LEFT_SIDE + colIndex * (CELL + GAP);
@@ -862,52 +745,24 @@ export default function MultiEditor() {
                   alignItems: "center",
                   gap: 8,
                   marginBottom: 20,
-                  justifyContent: "space-between",
                 }}
               >
-                <div
+                <strong style={{ width: 48, fontSize: 18, color: "#000" }}>
+                  {i + 1}번
+                </strong>
+                <input
+                  value={p.nickname}
+                  onChange={(e) => updateNickname(i, e.target.value)}
+                  placeholder="닉네임"
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
+                    padding: "12px 14px",
+                    fontSize: 16,
+                    borderRadius: 10,
                     flex: 1,
+                    border: "none",
+                    backgroundColor: "#f6f6f6",
                   }}
-                >
-                  <strong style={{ width: 48, fontSize: 18, color: "#000" }}>
-                    {i + 1}번
-                  </strong>
-                  <input
-                    value={p.nickname}
-                    onChange={(e) => updateNickname(i, e.target.value)}
-                    placeholder="닉네임"
-                    style={{
-                      padding: "12px 14px",
-                      fontSize: 16,
-                      borderRadius: 10,
-                      flex: 1,
-                      border: "none",
-                      backgroundColor: "#f6f6f6",
-                    }}
-                  />
-                </div>
-
-                {/* 개별 저장 버튼 */}
-                <button
-                  onClick={() => handleSaveMemberToServer(i)}
-                  disabled={!memberDirty[i]}
-                  style={{
-                    padding: "8px 12px",
-                    fontSize: 14,
-                    borderRadius: 8,
-                    border: "1px solid #ddd",
-                    background: memberDirty[i] ? "#4f46e5" : "#9ca3af",
-                    color: "#fff",
-                    cursor: memberDirty[i] ? "pointer" : "not-allowed",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {memberDirty[i] ? "저장" : "저장됨"}
-                </button>
+                />
               </div>
 
               <div
@@ -955,38 +810,13 @@ export default function MultiEditor() {
         </div>
       </section>
 
-      {/* 변경된 멤버들 일괄 저장 버튼 */}
-      <div style={{ display: "flex", justifyContent: "end", marginTop: 16 }}>
-        <button
-          onClick={handleSaveAllToServer}
-          disabled={!memberDirty.some((dirty) => dirty)}
-          style={{
-            padding: "12px 12px",
-            fontSize: 16,
-            lineHeight: 1,
-            borderRadius: 8,
-            background: memberDirty.some((dirty) => dirty)
-              ? "#4f46e5"
-              : "#9ca3af",
-            color: "#fff",
-            fontWeight: 500,
-            cursor: memberDirty.some((dirty) => dirty)
-              ? "pointer"
-              : "not-allowed",
-            border: "1px solid #ddd",
-          }}
-        >
-          변경된 멤버들 저장 ({memberDirty.filter(Boolean).length}명)
-        </button>
-      </div>
-
       {/* 배경 선택 */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: 10,
-          marginTop: 16,
+          marginTop: 12,
           justifyContent: "space-between",
         }}
       >
@@ -1008,9 +838,7 @@ export default function MultiEditor() {
             <button
               key={key}
               type="button"
-              onClick={() => {
-                setBgKey(key);
-              }}
+              onClick={() => setBgKey(key)}
               aria-pressed={bgKey === key}
               style={{
                 padding: 6,
@@ -1089,7 +917,7 @@ export default function MultiEditor() {
         </div>
       </section>
 
-      {/* PNG 저장 버튼 */}
+      {/* 저장 버튼 */}
       <div style={{ marginTop: 20, display: "grid", gap: 8 }}>
         <button
           onClick={handleSave}
