@@ -136,6 +136,7 @@ const DirectYoutubeInput = ({
             fontSize: 14, // 크기 줄임
             outline: "none",
             minWidth: 0, // flex 축소 허용
+            background: "#fff",
           }}
           autoComplete="off"
           autoCorrect="off"

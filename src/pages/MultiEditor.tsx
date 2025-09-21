@@ -755,6 +755,8 @@ export default function MultiEditor() {
                 borderRadius: 10,
                 border: "1px solid #ddd",
                 textAlign: "center",
+                background: "#fff",
+                color: "#000",
               }}
             />
 
@@ -831,6 +833,7 @@ export default function MultiEditor() {
                       borderRadius: 10,
                       border: "none",
                       backgroundColor: "#f6f6f6",
+                      color: "#000",
                     }}
                   />
                   <button

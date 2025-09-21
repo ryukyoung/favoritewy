@@ -89,7 +89,7 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
       { label: "Mua", url: "../assets/tiktok/mua.jpg" },
       { label: "pompom", url: "../assets/tiktok/pom.jpg" },
       { label: "Espresso", url: "../assets/tiktok/es.jpg" },
-      { label: "사츠마이모", url: "../assets/tiktok/sats.jpg" },
+      { label: "사츠마이모", url: "../assets/tiktok/sats.JPG" },
     ],
     allowUpload: true,
   },
