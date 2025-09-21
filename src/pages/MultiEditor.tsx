@@ -843,9 +843,9 @@ export default function MultiEditor() {
                       border: "1px solid #ddd",
                       background:
                         status === "dirty"
-                          ? "#fff9f0"
+                          ? "#fee1ed"
                           : status === "saved"
-                          ? "#f0fff4"
+                          ? "#fee1ed"
                           : "#fff",
                       color: "#000",
                       cursor: status === "saving" ? "not-allowed" : "pointer",

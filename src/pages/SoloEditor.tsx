@@ -37,8 +37,8 @@ const PREVIEW_BOARD_H =
 const BG1 = "../assets/bg-9.png";
 const BG2 = "../assets/bg-8.png";
 
-const PATTERN = [4, 4, 2];
-const PREFIX = [0, 4, 8, 10];
+const PATTERN = [4, 4, 3];
+const PREFIX = [0, 4, 8, 11];
 
 // === 유틸리티 함수들 ===
 
@@ -485,7 +485,7 @@ export default function SoloEditor() {
 
       // 이미지 셀들 그리기
       const promises = [];
-      for (let k = 0; k < Math.min(11, images.length); k++) {
+      for (let k = 0; k < Math.min(SOLO_COLS, images.length); k++) {
         const imageValue = images[k];
         const { wr, wc } = idxToWrap(k);
         const cellX = LEFT_SIDE + wc * (CELL + GAP);
@@ -647,7 +647,7 @@ export default function SoloEditor() {
           {renderRow([0, 1, 2], 3)}
           {renderRow([3, 4, 5], 3)}
           {renderRow([6, 7, 8], 3)}
-          {renderRow([9], 3)}
+          {renderRow([9, 10], 3)}
         </div>
       </section>
       {/* 배경 선택 */}
