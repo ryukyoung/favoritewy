@@ -94,8 +94,11 @@ const DirectYoutubeInput = ({
   // 기존 값이 YouTube 썸네일 URL인지 확인하여 초기값 설정
   useEffect(() => {
     if (typeof value === "string" && value.includes("ytimg.com")) {
-      // 기존 YouTube 썸네일이 있으면 입력창은 비워둠 (또는 원한다면 URL을 역변환)
+      // YouTube 썸네일이 있으면 "YouTube 영상 선택됨"으로 표시
       setQuery("");
+    } else if (typeof value === "string" && value) {
+      // YouTube URL이나 다른 문자열이면 그대로 표시
+      setQuery(value);
     }
   }, [value]);
 
@@ -121,43 +124,90 @@ const DirectYoutubeInput = ({
     }
   };
 
+  const clearInput = () => {
+    setQuery("");
+    onChange("");
+  };
+
+  // 현재 상태 표시
+  const hasYoutubeThumbnail =
+    typeof value === "string" && value.includes("ytimg.com");
+  const displayValue = hasYoutubeThumbnail ? "" : query;
+
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-      <input
-        ref={inputRef}
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="YouTube URL 입력"
-        style={{
-          flex: 1,
-          padding: "10px 12px",
-          fontSize: 14,
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          outline: "none",
-        }}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck="false"
-      />
-      <button
-        onClick={applyYoutubeUrl}
-        style={{
-          padding: "10px 12px",
-          fontSize: 14,
-          borderRadius: 8,
-          border: "1px solid #ddd",
-          background: query.trim() ? "#ff7ed0" : "#fff",
-          color: query.trim() ? "#fff" : "#333",
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-        }}
-      >
-        적용
-      </button>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {hasYoutubeThumbnail && (
+        <div
+          style={{
+            padding: "6px 10px",
+            backgroundColor: "#f0f8ff",
+            borderRadius: 6,
+            fontSize: 12,
+            color: "#0066cc",
+            border: "1px solid #cce7ff",
+            textAlign: "center",
+          }}
+        >
+          YouTube 영상 선택됨
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={displayValue}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="YouTube URL"
+          style={{
+            flex: 1,
+            padding: "8px 10px",
+            fontSize: 14, // 크기 줄임
+            border: "1px solid #ddd",
+            borderRadius: 6,
+            outline: "none",
+            minWidth: 0, // flex 축소 허용
+          }}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck="false"
+        />
+        {(query.trim() || hasYoutubeThumbnail) && (
+          <button
+            onClick={clearInput}
+            style={{
+              padding: "8px 10px",
+              fontSize: 12,
+              borderRadius: 6,
+              border: "1px solid #ddd",
+              background: "#fff",
+              color: "#666",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            지우기
+          </button>
+        )}
+        <button
+          onClick={applyYoutubeUrl}
+          disabled={!query.trim()}
+          style={{
+            padding: "8px 10px",
+            fontSize: 12,
+            borderRadius: 6,
+            border: "1px solid #ddd",
+            background: query.trim() ? "#ff7ed0" : "#f5f5f5",
+            color: query.trim() ? "#fff" : "#999",
+            cursor: query.trim() ? "pointer" : "not-allowed",
+            whiteSpace: "nowrap",
+          }}
+        >
+          적용
+        </button>
+      </div>
     </div>
   );
 };
@@ -188,7 +238,7 @@ export default function SmartImageCell({ value, onChange, config }: Props) {
           minWidth: 0,
           border: "1px solid #e9e9e9",
           borderRadius: 12,
-          padding: "12px",
+          padding: "10px",
           background: "#fff",
         }}
       >
