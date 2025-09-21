@@ -179,9 +179,7 @@ export default function MultiEditor() {
     createRoom().catch(console.error);
   }, [roomId, nav]);
 
-  /* =============================
-     초기 1회 로드 (실시간 구독 제거)
-  ============================== */
+  // 초기 1회 로드 (실시간 구독 제거)
   useEffect(() => {
     if (!roomRef) return;
     let cancelled = false;
@@ -214,15 +212,14 @@ export default function MultiEditor() {
       let p: Participant[] = Array.isArray(data.participants)
         ? [...data.participants]
         : [];
-
-      // 최소 2명 보장 (서버엔 쓰지 않음, 로컬 안전화)
-      while (p.length < 2) p.push(makeEmptyParticipant());
-
       const c = clamp(
         typeof data.count === "number" ? data.count : p.length || 2,
         2,
         10
       );
+
+      // ✅ 로컬 participants를 'count'까지 패딩해서 편집 행이 count개 보이게
+      while (p.length < c) p.push(makeEmptyParticipant());
 
       if (!cancelled) {
         setParticipants(p);
@@ -268,11 +265,36 @@ export default function MultiEditor() {
     if (!roomRef) return;
     await ensureSignedIn();
     try {
-      await updateDoc(roomRef, {
-        count,
-        updatedAt: serverTimestamp(),
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(roomRef);
+        if (!snap.exists()) throw new Error("방 문서가 없습니다.");
+
+        const data = snap.data() as any;
+        const serverParticipants: Participant[] = Array.isArray(
+          data.participants
+        )
+          ? [...data.participants]
+          : [];
+        // ✅ 서버의 participants도 count까지 패딩
+        while (serverParticipants.length < count) {
+          serverParticipants.push(makeEmptyParticipant());
+        }
+
+        tx.update(roomRef, {
+          count,
+          participants: serverParticipants,
+          updatedAt: serverTimestamp(),
+        });
       });
-      alert("인원 수가 저장되었습니다. 다른 사람은 새로고침 시 반영됩니다.");
+
+      // 로컬 쪽도 혹시 부족하면 맞춰둠
+      setParticipants((prev) => {
+        const next = [...prev];
+        while (next.length < count) next.push(makeEmptyParticipant());
+        return next;
+      });
+
+      alert("인원 수가 저장되었습니다.");
     } catch (e) {
       console.error(e);
       alert("인원 수 저장에 실패했습니다.");
@@ -389,7 +411,7 @@ export default function MultiEditor() {
           setStatus(idx, "idle");
         }, 1500);
 
-        alert(`${idx + 1}번 참가자 내용이 저장되었습니다.`);
+        alert(`${idx + 1}번 내용이 저장되었습니다.`);
       } catch (e) {
         console.error(e);
         setStatus(idx, "dirty"); // 실패 시 다시 수정 상태로 되돌림
@@ -768,7 +790,7 @@ export default function MultiEditor() {
               }}
               title="인원 수 저장"
             >
-              인원 수 저장
+              저장
             </button>
           </div>
         </div>
@@ -793,6 +815,7 @@ export default function MultiEditor() {
                     alignItems: "center",
                     gap: 8,
                     marginBottom: 20,
+                    width: "100%",
                   }}
                 >
                   <strong style={{ width: 48, fontSize: 18, color: "#000" }}>
