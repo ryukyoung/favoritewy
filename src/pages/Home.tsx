@@ -4,8 +4,6 @@ import { db, auth } from "../lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { signInAnonymously } from "firebase/auth";
 
-const logo = "../assets/logo.png";
-
 export default function Home() {
   const nav = useNavigate();
   const [creating, setCreating] = useState(false);
@@ -55,16 +53,36 @@ export default function Home() {
       {/* 중앙 래퍼: 실제 가로폭 확보 */}
       <div
         style={{
-          transform: "translateY(20px)",
+          transform: "translateY(35px)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           gap: 30,
-          maxWidth: 520, // ✅ 원하는 최대 폭
+          width: "100%",
           boxSizing: "border-box", // ✅ 패딩 포함 계산
         }}
       >
-        <img src={logo} alt="logo" />
+        <div
+          style={{
+            fontSize: 49,
+            fontWeight: 700,
+            lineHeight: 0.9,
+            marginBottom: 45,
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              transform: "scaleY(1.45)", // ← 글자 자체를 1.25배 세로 늘림
+              transformOrigin: "top left", // 기준점 고정
+              color: "#ff7ed0",
+            }}
+          >
+            WHAT'S YOUR
+            <br />
+            FAVORITE WY??
+          </span>
+        </div>
 
         {/* 버튼 행 */}
         <div

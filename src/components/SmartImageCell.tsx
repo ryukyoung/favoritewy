@@ -102,28 +102,23 @@ const DirectYoutubeInput = ({
     }
   }, [value]);
 
-  const applyYoutubeUrl = () => {
-    const trimmed = query.trim();
-    if (!trimmed) {
-      onChange(""); // 빈 값으로 클리어
-      return;
-    }
-
-    const id = getYoutubeId(trimmed);
-    if (!id) {
-      alert("유효한 YouTube URL 또는 영상 ID를 입력해 주세요.");
-      return;
-    }
-    onChange(getYoutubeThumb(id, "hq"));
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      applyYoutubeUrl();
+      handleBlur((e.target as HTMLInputElement).value);
     }
   };
+  const handleBlur = (raw: string) => {
+    const text = raw.trim();
+    if (!text) return;
 
+    const id = getYoutubeId(text);
+    if (!id) return; // 유효하지 않으면 그냥 무시 (경고 원하면 alert 넣어도 됨)
+
+    onChange(getYoutubeThumb(id, "hq")); // 썸네일/URL 반영
+    // 패널을 자동으로 닫고 싶다면:
+    // onHide?.();
+  };
   // 현재 상태 표시
   const hasYoutubeThumbnail =
     typeof value === "string" && value.includes("ytimg.com");
@@ -138,7 +133,7 @@ const DirectYoutubeInput = ({
           value={displayValue}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          onClick={applyYoutubeUrl}
+          onBlur={(e) => handleBlur(e.currentTarget.value)}
           placeholder="https://youtu.be/wY4IVba83bo1"
           style={{
             flex: 1,
