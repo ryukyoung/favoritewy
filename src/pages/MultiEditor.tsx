@@ -825,10 +825,10 @@ export default function MultiEditor() {
                     onChange={(e) => updateNickname(i, e.target.value)}
                     placeholder="닉네임"
                     style={{
+                      width: "100%",
                       padding: "12px 14px",
                       fontSize: 16,
                       borderRadius: 10,
-                      flex: 1,
                       border: "none",
                       backgroundColor: "#f6f6f6",
                     }}
@@ -850,6 +850,7 @@ export default function MultiEditor() {
                       color: "#000",
                       cursor: status === "saving" ? "not-allowed" : "pointer",
                       whiteSpace: "nowrap",
+                      width: 55,
                     }}
                     title="이 사람만 저장"
                   >
