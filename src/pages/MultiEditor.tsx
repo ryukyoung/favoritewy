@@ -32,7 +32,7 @@ const GRID_COLS = Math.ceil(IMG_COLS / GRID_ROWS);
 // 배경 파일 - public 폴더로 이동 권장
 const BG1 = "../assets/bg-5.png";
 const BG2 = "../assets/bg-10.png";
-const BG3 = "../assets/bg-11.png";
+const BG3 = "../assets/bg-13.png";
 
 // 기본 타이틀
 const DEFAULT_TITLES = COLUMN_CONFIGS.map((c) => c.title);

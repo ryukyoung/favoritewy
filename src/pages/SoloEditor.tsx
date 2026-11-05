@@ -36,7 +36,7 @@ const PREVIEW_BOARD_H =
 // 배경 파일 - public 폴더로 이동 권장
 const BG1 = "../assets/bg-9.png";
 const BG2 = "../assets/bg-8.png";
-const BG3 = "../assets/bg-12.png";
+const BG3 = "../assets/bg-14.png";
 
 
 const PATTERN = [4, 4, 3];
