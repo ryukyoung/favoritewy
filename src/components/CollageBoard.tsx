@@ -10,8 +10,8 @@ type Props = {
   imgCols?: number;
   boardWidth?: number;
   boardHeight?: number;
-  /** ✅ 배경 선택값: "bg1" | "bg2" */
-  bgKey?: "bg1" | "bg2";
+  /** ✅ 배경 선택값: "bg1" | "bg2" | "bg3" */
+  bgKey?: "bg1" | "bg2" | "bg3";
 };
 
 export default function CollageBoard({
@@ -69,7 +69,7 @@ export default function CollageBoard({
     /(?:^|\/\/)(?:i\.)?ytimg\.com|img\.youtube\.com/i.test(src);
 
   // ✅ 배경에 따라 닉네임 색상 자동 결정
-  const nicknameColor = bgKey === "bg1" ? "#fff" : "#000";
+  const nicknameColor = bgKey === "bg2" ? "#000" : "#fff";
 
   return (
     <div

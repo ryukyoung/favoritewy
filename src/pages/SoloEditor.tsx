@@ -36,6 +36,8 @@ const PREVIEW_BOARD_H =
 // 배경 파일 - public 폴더로 이동 권장
 const BG1 = "../assets/bg-9.png";
 const BG2 = "../assets/bg-8.png";
+const BG3 = "../assets/bg-12.png";
+
 
 const PATTERN = [4, 4, 3];
 const PREFIX = [0, 4, 8, 11];
@@ -262,8 +264,8 @@ export default function SoloEditor() {
   const nav = useNavigate();
 
   // 상태 초기화
-  const [bgKey, setBgKey] = useState<"bg1" | "bg2">(
-    (localStorage.getItem(getStorageKey("bgKey")) as "bg1" | "bg2") || "bg1"
+  const [bgKey, setBgKey] = useState<"bg1" | "bg2" | "bg3">(
+    (localStorage.getItem(getStorageKey("bgKey")) as "bg1" | "bg2" | "bg3") || "bg1"
   );
 
   const [nickname, setNickname] = useState(
@@ -281,7 +283,7 @@ export default function SoloEditor() {
   const previewWrapRef = useRef<HTMLDivElement>(null);
 
   // 계산된 값들
-  const selectedBgUrl = bgKey === "bg1" ? BG1 : BG2;
+  const selectedBgUrl = bgKey === "bg1" ? BG1 : bgKey === "bg2" ? BG2 : BG3;
 
   const SOLO_CONFIGS = useMemo(() => {
     const out = [...COLUMN_CONFIGS].slice(0, SOLO_COLS);
@@ -449,11 +451,11 @@ export default function SoloEditor() {
       ctx.textBaseline = "middle";
 
       // 닉네임 색상 설정
-      const nicknameColor = bgKey === "bg1" ? "#fff" : "#52c4ff";
+      const nicknameColor = bgKey === "bg2" ? "#52c4ff" : "#fff";
       ctx.fillStyle = nicknameColor;
 
-      // 텍스트 그림자 설정 (bg1일 때만)
-      if (bgKey === "bg1") {
+      // 텍스트 그림자 설정 (bg1, bg3일 때만)
+      if (bgKey !== "bg2") {
         ctx.shadowColor = "rgba(0,0,0,0.45)";
         ctx.shadowBlur = 2;
         ctx.shadowOffsetX = 0;
@@ -674,6 +676,7 @@ export default function SoloEditor() {
           {[
             { key: "bg1" as const, src: BG1, label: "배경 1" },
             { key: "bg2" as const, src: BG2, label: "배경 2" },
+            { key: "bg3" as const, src: BG3, label: "배경 3" },
           ].map(({ key, src, label }) => (
             <button
               key={key}

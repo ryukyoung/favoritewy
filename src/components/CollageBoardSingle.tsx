@@ -12,7 +12,7 @@ type Props = {
   boardWidth?: number;
   boardHeight?: number;
   // ✅ 배경 선택에 따라 닉네임 색상 제어
-  bgKey?: "bg1" | "bg2";
+  bgKey?: "bg1" | "bg2" | "bg3";
 };
 
 const PATTERN = [4, 4, 3]; // 4 / 4 / 2 고정
@@ -89,9 +89,9 @@ export default function CollageBoardSingle({
   };
 
   // ✅ 배경에 따라 닉네임 색
-  const nicknameColor = bgKey === "bg1" ? "#fff" : "#52c4ff";
+  const nicknameColor = bgKey === "bg2" ? "#52c4ff" : "#fff";
   // (가독성 보강하고 싶으면 textShadow 주석 해제)
-  const nicknameShadow = bgKey === "bg1" ? "0 1px 2px rgba(0,0,0,.45)" : "none";
+  const nicknameShadow = bgKey === "bg2" ? "none" : "0 1px 2px rgba(0,0,0,.45)";
 
   const isYoutubeThumbSrc = (src: string) =>
     /(?:^|\/\/)(?:i\.)?ytimg\.com|img\.youtube\.com/i.test(src);

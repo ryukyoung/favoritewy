@@ -37,6 +37,9 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
       { label: "Blue Heart", url: "../assets/written/blueheart.png" },
       { label: "ATTITUDE", url: "../assets/written/attitude.png" },
       { label: "XOXZ", url: "../assets/written/xoxz.png" },
+      { label: "BANG BANG", url: "../assets/written/bangbang.png" },
+      { label: "8", url: "../assets/written/8.png" },
+
     ],
   },
   {
@@ -63,6 +66,9 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
       { label: "New Balance", url: "../assets/ad/nb.jpeg" },
       { label: "메디큐브 AGE-R", url: "../assets/ad/medi.jpeg" },
       { label: "BVLGARI", url: "../assets/ad/bvlgari.jpeg" },
+      { label: "BARRIE", url: "../assets/ad/barrie.png" },
+      { label: "닥터엘시아", url: "../assets/ad/dralthea.png" },
+      { label: "UGG", url: "../assets/ad/ugg.png" },
     ],
   },
   {
@@ -77,6 +83,8 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
       { label: "IVE SWITCH", url: "../assets/album/switch-album.jpeg" },
       { label: "IVE EMPATHY", url: "../assets/album/empathy-album.png" },
       { label: "IVE SECRET", url: "../assets/album/secret-album.jpeg" },
+      { label: "REVIVE+", url: "../assets/album/revive-album.png" },
+      { label: "Looks Can Kill", url: "../assets/album/lck-album.png" },
     ],
   },
   {
@@ -112,6 +120,8 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
         label: "추성훈\n(미녀와 마초)",
         url: "../assets/show/미녀.jpeg",
       },
+      { label: "셰프 안성재", url: "../assets/show/chef.png" },
+      { label: "오늘의 주우재", url: "../assets/show/joo.png" },
     ],
     allowUpload: true,
   },
@@ -125,6 +135,11 @@ export const COLUMN_CONFIGS: ColumnConfig[] = [
       { label: "250614", url: "../assets/live/b1.png" },
       { label: "250726", url: "../assets/live/b2.png" },
       { label: "250921", url: "../assets/live/b3.png" },
+      { label: "260124", url: "../assets/live/b6.png" },
+      { label: "260227", url: "../assets/live/b7.png" },
+      { label: "260523", url: "../assets/live/b8.png" },
+      { label: "260810", url: "../assets/live/b4.png" },
+      { label: "261022", url: "../assets/live/b5.png" },
     ],
   },
   {
