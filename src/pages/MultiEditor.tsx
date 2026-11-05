@@ -33,6 +33,8 @@ const GRID_COLS = Math.ceil(IMG_COLS / GRID_ROWS);
 const BG1 = "../assets/bg-5.png";
 const BG2 = "../assets/bg-10.png";
 const BG3 = "../assets/bg-13.png";
+const BG4 = "../assets/bg-15.png";
+
 
 // 기본 타이틀
 const DEFAULT_TITLES = COLUMN_CONFIGS.map((c) => c.title);
@@ -133,14 +135,15 @@ export default function MultiEditor() {
     Array.from({ length: 2 }, makeEmptyParticipant)
   );
   const [countField, setCountField] = useState("2");
-  const [bgKey, setBgKey] = useState<"bg1" | "bg2" | "bg3">("bg1");
+  const [bgKey, setBgKey] = useState<"bg1" | "bg2" | "bg3" | "bg4">("bg1");
   const [previewScale, setPreviewScale] = useState(1);
 
   // 행별 상태: idle(기본) → dirty(변경 있음) → saving → saved(잠깐 표시 후 idle)
   const [rowStatus, setRowStatus] = useState<Record<number, RowStatus>>({});
 
   const titles = DEFAULT_TITLES;
-  const selectedBgUrl = bgKey === "bg1" ? BG1 : bgKey === "bg2" ? BG2 : BG3;
+  const selectedBgUrl =
+    bgKey === "bg1" ? BG1 : bgKey === "bg2" ? BG2 : bgKey === "bg3" ? BG3 : BG4;
 
   // 방 레퍼런스
   const roomRef = useMemo(
@@ -519,7 +522,8 @@ export default function MultiEditor() {
           ctx.font = "500 23px Arial, sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillStyle = bgKey === "bg2" ? "#000" : "#fff";
+          ctx.fillStyle =
+            bgKey === "bg2" || bgKey === "bg4" ? "#000" : "#fff";
 
           const nicknameX = LEFT_SIDE / 2;
           const nicknameY = rowY + CELL / 2;
@@ -933,6 +937,7 @@ export default function MultiEditor() {
             { key: "bg1" as const, src: BG1, label: "배경 1" },
             { key: "bg2" as const, src: BG2, label: "배경 2" },
             { key: "bg3" as const, src: BG3, label: "배경 3" },
+            { key: "bg4" as const, src: BG4, label: "배경 4" },
           ].map(({ key, src, label }) => (
             <button
               key={key}
